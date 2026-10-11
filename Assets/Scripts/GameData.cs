@@ -29,6 +29,10 @@ public class GameData : MonoBehaviour
     public long birthTimeTicks = 0;  // 出生时间戳（首次启动在 Awake 初始化，DateTime.Now）
     public int debugDayOffset = 0;   // 仅测试用：天数偏移，交付时必须为 0
 
+    // ---- 签到字段（阶段三任务14）----
+    public long lastSignInDateTicks = 0; // 上次签到日的本地日期（当天 0 点，DateTime.Today.Ticks；0=从未签到）
+    public int signInStreak = 0;         // 当前连签天数（1~7 一周一轮；0=从未签到/旧档无此键）
+
     // ---- 衰减速率与离线上限（工单指定）----
     private const float HungerDecayPerSec = 0.01f;
     private const float HealthDecayPerSec = 0.005f;
@@ -48,6 +52,8 @@ public class GameData : MonoBehaviour
     private const string KeyCareScore = "pp_careScore";           // 任务11
     private const string KeyBirthTicks = "pp_birthTimeTicks";     // 任务11
     private const string KeyDebugDayOffset = "pp_debugDayOffset"; // 任务11
+    private const string KeyLastSignInDate = "pp_lastSignInDateTicks"; // 任务14
+    private const string KeySignInStreak = "pp_signInStreak";           // 任务14
 
     private void Awake()
     {
@@ -86,6 +92,8 @@ public class GameData : MonoBehaviour
         PlayerPrefs.SetString(KeyCareScore, careScore.ToString());
         PlayerPrefs.SetString(KeyBirthTicks, birthTimeTicks.ToString());
         PlayerPrefs.SetInt(KeyDebugDayOffset, debugDayOffset);
+        PlayerPrefs.SetString(KeyLastSignInDate, lastSignInDateTicks.ToString()); // 任务14：long 沿用字符串存档风格
+        PlayerPrefs.SetInt(KeySignInStreak, signInStreak);
         PlayerPrefs.Save();
     }
 
@@ -104,6 +112,8 @@ public class GameData : MonoBehaviour
         if (long.TryParse(PlayerPrefs.GetString(KeyCareScore, ""), out var cs)) careScore = cs;
         if (long.TryParse(PlayerPrefs.GetString(KeyBirthTicks, ""), out var bt)) birthTimeTicks = bt;
         debugDayOffset = PlayerPrefs.GetInt(KeyDebugDayOffset, debugDayOffset); // 旧档缺键→保持 0
+        if (long.TryParse(PlayerPrefs.GetString(KeyLastSignInDate, ""), out var lsd)) lastSignInDateTicks = lsd; // 旧档缺键→保持 0
+        signInStreak = PlayerPrefs.GetInt(KeySignInStreak, signInStreak); // 旧档缺键→保持 0
     }
 
     /// <summary>离线衰减：按上次存档至今的秒数 × 同速率扣除，最多按 8 小时计</summary>
@@ -149,5 +159,37 @@ public class GameData : MonoBehaviour
         if (careScore >= 300) return "漂亮鸡";
         if (careScore >= 150) return "普通鸡";
         return "邋遢鸡";
+    }
+
+    // ---------------- 签到（阶段三任务14） ----------------
+
+    /// <summary>今天是否还没签到（本地日期对比：lastSignInDateTicks==今天0点 视为已签；0=从未签到→可签）</summary>
+    public bool CanSignInToday()
+    {
+        return lastSignInDateTicks != DateTime.Today.Ticks;
+    }
+
+    /// <summary>今天签到会得的金币（第 7 天连签 = 10万+100万，其余 = 10万），供 UI 显示，不改动任何状态</summary>
+    public int GetTodayReward()
+    {
+        long yesterday = DateTime.Today.AddDays(-1).Ticks;
+        int streakToday = (lastSignInDateTicks == yesterday) ? signInStreak + 1 : 1; // 今天若签到将处的连签天数：昨天签过→+1，首次/断签→1
+        if (streakToday > 7) streakToday = 1; // 一周一轮：第 8 天回到第 1 天
+        return streakToday >= 7 ? 100000 + 1000000 : 100000;
+    }
+
+    /// <summary>执行签到：连签判定（昨天签过→+1，否则→1；满 7 后新一轮回 1）、记录今天 0 点、金币入账、立即存档；返回本次奖励（当天已签返回 0，不重复发奖）</summary>
+    public int DoSignIn()
+    {
+        if (!CanSignInToday()) return 0; // 防重复：当天已签
+        int reward = GetTodayReward();     // 须在改动连签状态之前计算本次奖励
+        long today = DateTime.Today.Ticks;
+        long yesterday = DateTime.Today.AddDays(-1).Ticks;
+        signInStreak = (lastSignInDateTicks == yesterday) ? signInStreak + 1 : 1; // 昨天签过→连签+1；首次/断签→1
+        if (signInStreak > 7) signInStreak = 1; // 一周一轮：第 8 天回到第 1 天
+        lastSignInDateTicks = today;
+        coins += reward;
+        Save(); // 立即存档
+        return reward;
     }
 }

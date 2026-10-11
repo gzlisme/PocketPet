@@ -10,6 +10,7 @@ using UnityEngine.UI;
 /// - OpenYardPanel/PlayFree/PlayPremium/CloseYardPanel：院子逗鸡（任务8，扣金币加心情并立即存档）
 /// - OpenBedroomPanel/SleepNormal/SleepDeep/CloseBedroomPanel：卧室睡觉（任务9，扣金币加健康/心情并立即存档）
 /// - OpenShopPanel/CloseShopPanel/BuyOrToggleItem/RefreshChickDecoration：商店（任务10，买装饰、装备/卸下、小鸡色块显示）
+/// - OnClickSignIn/RefreshSignInButton：抽屉内每日签到（任务14，领10万金币，第7天连签再+100万，已签置灰）
 /// </summary>
 public class UIManager : MonoBehaviour
 {
@@ -31,6 +32,8 @@ public class UIManager : MonoBehaviour
     [SerializeField] private GameObject slotGlasses;    // 小鸡墨镜槽位
     [SerializeField] private GameObject evolutionPopup;  // 进化弹窗根（任务12，Canvas 最后子对象，默认不激活）
     [SerializeField] private Text popupText;             // 进化弹窗文本（PopupPanel/PopupText）
+    [SerializeField] private Button signInButton;        // 抽屉内签到按钮 Btn_SignIn（任务14）
+    [SerializeField] private Text signInText;             // 签到按钮文本 Text_SignIn（任务14）
 
     private Camera cam;
     private string currentRoom;
@@ -61,6 +64,11 @@ public class UIManager : MonoBehaviour
         ApplyEvolutionVisual(); // 任务11：进场即应用进化视觉
     }
 
+    private void Start()
+    {
+        RefreshSignInButton(); // 任务14：进场刷新签到按钮（Start 时全部 Awake 已完成，GameData 必已读档——工单拍板 B 方案）
+    }
+
     private void Update()
     {
         // 任务12：进化弹窗激活满 2 秒自动关闭（放最前，不依赖 GameData/小鸡状态）
@@ -83,7 +91,11 @@ public class UIManager : MonoBehaviour
     {
         if (drawerPanel == null) return;
         bool open = !drawerPanel.activeSelf;
-        if (open) CloseAllPanels(); // 抽屉与面板互斥：开抽屉先关五个功能面板；关抽屉不动面板
+        if (open)
+        {
+            CloseAllPanels(); // 抽屉与面板互斥：开抽屉先关五个功能面板；关抽屉不动面板
+            RefreshSignInButton(); // 修正单：开抽屉时刷新签到按钮
+        }
         drawerPanel.SetActive(open);
         if (closeDrawerArea != null) closeDrawerArea.SetActive(open);
     }
@@ -503,6 +515,35 @@ public class UIManager : MonoBehaviour
             case "少年鸡": return 2;
             case "成年鸡": return 3;
             default: return -1;
+        }
+    }
+
+    // ---------------- 签到（阶段三任务14） ----------------
+
+    /// <summary>签到按钮点击：当天已签→直接返回不做事；否则执行签到并刷新按钮显示</summary>
+    public void OnClickSignIn()
+    {
+        var gd = GameData.Instance;
+        if (gd == null) return;
+        if (!gd.CanSignInToday()) return; // 当天已签，不做事
+        gd.DoSignIn();
+        RefreshSignInButton();
+    }
+
+    /// <summary>按 GameData 状态刷新签到按钮：可签→"签到（+奖励）"可点；已签→"已签到"置灰不可点</summary>
+    public void RefreshSignInButton()
+    {
+        var gd = GameData.Instance;
+        if (gd == null || signInButton == null || signInText == null) return;
+        if (gd.CanSignInToday())
+        {
+            signInText.text = "签到（+" + gd.GetTodayReward() + "）";
+            signInButton.interactable = true;
+        }
+        else
+        {
+            signInText.text = "已签到";
+            signInButton.interactable = false;
         }
     }
 
