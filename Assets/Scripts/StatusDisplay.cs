@@ -20,9 +20,9 @@ public class StatusDisplay : MonoBehaviour
     {
         var gd = GameData.Instance;
         if (gd == null) return;
-        if (textHunger != null) textHunger.text = "饥饿：" + Mathf.FloorToInt(gd.hunger) + "/100";
-        if (textHealth != null) textHealth.text = "健康：" + Mathf.FloorToInt(gd.health) + "/100";
-        if (textMood != null) textMood.text = "心情：" + Mathf.FloorToInt(gd.mood) + "/100";
+        if (textHunger != null) textHunger.text = "食物：" + Mathf.FloorToInt(gd.hunger);
+        if (textHealth != null) textHealth.text = "健康：" + Mathf.FloorToInt(gd.health);
+        if (textMood != null) textMood.text = "心情：" + Mathf.FloorToInt(gd.mood);
         if (textCoins != null) textCoins.text = "金币：" + gd.coins;
         if (textDay != null) textDay.text = "第 " + gd.GetCurrentDay() + " 天";
         if (textStage != null) textStage.text = "阶段：" + gd.GetCurrentStage();

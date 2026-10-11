@@ -29,10 +29,13 @@ public class UIManager : MonoBehaviour
     [SerializeField] private GameObject slotHat;         // 小鸡帽子槽位（Chick 子对象）
     [SerializeField] private GameObject slotScarf;       // 小鸡围巾槽位
     [SerializeField] private GameObject slotGlasses;    // 小鸡墨镜槽位
+    [SerializeField] private GameObject evolutionPopup;  // 进化弹窗根（任务12，Canvas 最后子对象，默认不激活）
+    [SerializeField] private Text popupText;             // 进化弹窗文本（PopupPanel/PopupText）
 
     private Camera cam;
     private string currentRoom;
     private float hintUntil = -999f;
+    private float popupShownAt = -999f;              // 任务12：进化弹窗弹出时刻（激活满 2 秒自动关闭）
 
     // ---- 进化（阶段三任务11）----
     private Transform chickTr;      // Chick 缓存（位置不动，只改 scale/color）
@@ -60,12 +63,18 @@ public class UIManager : MonoBehaviour
 
     private void Update()
     {
+        // 任务12：进化弹窗激活满 2 秒自动关闭（放最前，不依赖 GameData/小鸡状态）
+        if (evolutionPopup != null && evolutionPopup.activeSelf && Time.time - popupShownAt >= 2f)
+            CloseEvolutionPopup();
+
         // 任务11：阶段或成年形态变化时才重设（避免每帧重设）
         var gd = GameData.Instance;
         if (gd == null || chickTr == null) return;
         string stage = gd.GetCurrentStage();
         string form = stage == "成年鸡" ? gd.GetFinalForm() : "";
         if (stage == lastStage && form == lastForm) return;
+        if (lastStage != null && StageOrder(stage) > StageOrder(lastStage))
+            ShowEvolutionPopup(lastStage, stage); // 任务12：阶段升高弹「进化了！」（回退/相同不弹）
         ApplyEvolutionVisual();
     }
 
@@ -152,8 +161,8 @@ public class UIManager : MonoBehaviour
         }
         GameData.Instance.careScore += 10; // 任务11：互动成功加分（金币不足不加分）
         gd.coins -= cost;
-        gd.hunger = Mathf.Min(100f, gd.hunger + hungerGain);
-        if (moodGain > 0f) gd.mood = Mathf.Min(100f, gd.mood + moodGain);
+        gd.hunger = Mathf.Max(0f, gd.hunger + hungerGain);
+        if (moodGain > 0f) gd.mood = Mathf.Max(0f, gd.mood + moodGain);
         gd.Save(); // 立即存档
         if (feedFeedbackText != null) feedFeedbackText.text = "喂食成功";
     }
@@ -201,8 +210,8 @@ public class UIManager : MonoBehaviour
         }
         GameData.Instance.careScore += 10; // 任务11：互动成功加分（金币不足不加分）
         gd.coins -= cost;
-        gd.health = Mathf.Min(100f, gd.health + healthGain);
-        if (moodGain > 0f) gd.mood = Mathf.Min(100f, gd.mood + moodGain);
+        gd.health = Mathf.Max(0f, gd.health + healthGain);
+        if (moodGain > 0f) gd.mood = Mathf.Max(0f, gd.mood + moodGain);
         gd.Save(); // 立即存档
         if (bathFeedbackText != null) bathFeedbackText.text = "洗澡成功";
     }
@@ -242,7 +251,7 @@ public class UIManager : MonoBehaviour
         }
         GameData.Instance.careScore += 10; // 任务11：互动成功加分（免费项也加，金币不足不加）
         gd.coins -= cost; // 免费项为 0，等效不扣
-        gd.mood = Mathf.Min(100f, gd.mood + moodGain);
+        gd.mood = Mathf.Max(0f, gd.mood + moodGain);
         gd.Save(); // 立即存档
         if (yardFeedbackText != null) yardFeedbackText.text = "逗鸡成功，小鸡很开心！";
     }
@@ -282,8 +291,8 @@ public class UIManager : MonoBehaviour
         }
         GameData.Instance.careScore += 10; // 任务11：互动成功加分（免费项也加，金币不足不加）
         gd.coins -= cost; // 免费项为 0，等效不扣
-        gd.health = Mathf.Min(100f, gd.health + healthGain);
-        gd.mood = Mathf.Min(100f, gd.mood + moodGain);
+        gd.health = Mathf.Max(0f, gd.health + healthGain);
+        gd.mood = Mathf.Max(0f, gd.mood + moodGain);
         gd.Save(); // 立即存档
         if (bedroomFeedbackText != null) bedroomFeedbackText.text = "小鸡睡得好香！";
     }
@@ -464,5 +473,52 @@ public class UIManager : MonoBehaviour
     {
         if (slotObj == null || slotObj.transform.childCount == 0) return;
         slotObj.transform.GetChild(0).gameObject.SetActive(false);
+    }
+
+    // ---------------- 进化仪式弹窗（任务12） ----------------
+
+    /// <summary>阶段升级弹窗：激活 EvolutionPopup、设置文本、关全部面板与抽屉、记录弹出时刻（2 秒自动关）</summary>
+    private void ShowEvolutionPopup(string fromStage, string toStage)
+    {
+        if (evolutionPopup == null) return;
+        evolutionPopup.SetActive(true);
+        if (popupText != null) popupText.text = "进化了！\n" + fromStage + " → " + toStage;
+        CloseAllPanelsAndDrawer();
+        popupShownAt = Time.time;
+    }
+
+    /// <summary>关闭进化弹窗（DimOverlay 按钮 onClick 持久化接线与 Update 2 秒自动关闭共用）</summary>
+    public void CloseEvolutionPopup()
+    {
+        if (evolutionPopup != null) evolutionPopup.SetActive(false);
+    }
+
+    /// <summary>阶段序：蛋 0 &lt; 幼鸡 1 &lt; 少年鸡 2 &lt; 成年鸡 3（未知 -1）——只升不退才弹窗</summary>
+    private static int StageOrder(string stage)
+    {
+        switch (stage)
+        {
+            case "蛋": return 0;
+            case "幼鸡": return 1;
+            case "少年鸡": return 2;
+            case "成年鸡": return 3;
+            default: return -1;
+        }
+    }
+
+    // ---------------- 测试开关（临时代码，交付前删除） ----------------
+
+    /// <summary>测试按钮 Btn_DebugDayPlus：天数 +1（只改 debugDayOffset，不存档、不动其他状态）</summary>
+    public void DebugAddDay()
+    {
+        var gd = GameData.Instance;
+        if (gd != null) gd.debugDayOffset += 1;
+    }
+
+    /// <summary>测试按钮 Btn_DebugDayReset：天数归零（只改 debugDayOffset，不存档、不动其他状态）</summary>
+    public void DebugResetDay()
+    {
+        var gd = GameData.Instance;
+        if (gd != null) gd.debugDayOffset = 0;
     }
 }

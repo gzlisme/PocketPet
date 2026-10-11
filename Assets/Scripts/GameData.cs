@@ -65,9 +65,9 @@ public class GameData : MonoBehaviour
     private void Update()
     {
         // 在线衰减（帧率无关）
-        hunger = Mathf.Clamp(hunger - HungerDecayPerSec * Time.deltaTime, 0f, 100f);
-        health = Mathf.Clamp(health - HealthDecayPerSec * Time.deltaTime, 0f, 100f);
-        mood = Mathf.Clamp(mood - MoodDecayPerSec * Time.deltaTime, 0f, 100f);
+        hunger = Mathf.Max(0f, hunger - HungerDecayPerSec * Time.deltaTime);
+        health = Mathf.Max(0f, health - HealthDecayPerSec * Time.deltaTime);
+        mood = Mathf.Max(0f, mood - MoodDecayPerSec * Time.deltaTime);
     }
 
     /// <summary>存档：全部字段写入 PlayerPrefs，并记录存档时刻</summary>
@@ -113,9 +113,9 @@ public class GameData : MonoBehaviour
         double offlineSeconds = (DateTime.UtcNow.Ticks - lastSaveTimeTicks) / (double)TimeSpan.TicksPerSecond;
         if (offlineSeconds <= 0) return;
         double capped = Math.Min(offlineSeconds, MaxOfflineSeconds);
-        hunger = Mathf.Clamp((float)(hunger - HungerDecayPerSec * capped), 0f, 100f);
-        health = Mathf.Clamp((float)(health - HealthDecayPerSec * capped), 0f, 100f);
-        mood = Mathf.Clamp((float)(mood - MoodDecayPerSec * capped), 0f, 100f);
+        hunger = Mathf.Max(0f, (float)(hunger - HungerDecayPerSec * capped));
+        health = Mathf.Max(0f, (float)(health - HealthDecayPerSec * capped));
+        mood = Mathf.Max(0f, (float)(mood - MoodDecayPerSec * capped));
     }
 
     // 退出 / 失焦时自动存档（编辑器停止 Play 也会触发 OnApplicationQuit）
