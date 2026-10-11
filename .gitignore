@@ -37,6 +37,7 @@ _*_log.txt
 _verify_*.png
 _verify_log.txt
 _fix_*.txt
+screenshots/
 
 # ===== 构建产物 =====
 *.apk
@@ -49,3 +50,4 @@ _fix_*.txt
 skills-lock.json
 _jev_usage.log
 .env
+CODELY.md
