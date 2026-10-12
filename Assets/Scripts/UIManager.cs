@@ -11,6 +11,7 @@ using UnityEngine.UI;
 /// - OpenBedroomPanel/SleepNormal/SleepDeep/CloseBedroomPanel：卧室睡觉（任务9，扣金币加健康/心情并立即存档）
 /// - OpenShopPanel/CloseShopPanel/BuyOrToggleItem/RefreshChickDecoration：商店（任务10，买装饰、装备/卸下、小鸡色块显示）
 /// - OnClickSignIn/RefreshSignInButton：抽屉内每日签到（任务14，领10万金币，第7天连签再+100万，已签置灰）
+/// - OpenAchievementPanel/CloseAchievementPanel/RefreshAchievementPanel：成就面板（任务15C，6 成就名称/进度/状态列表）
 /// </summary>
 public class UIManager : MonoBehaviour
 {
@@ -34,6 +35,8 @@ public class UIManager : MonoBehaviour
     [SerializeField] private Text popupText;             // 进化弹窗文本（PopupPanel/PopupText）
     [SerializeField] private Button signInButton;        // 抽屉内签到按钮 Btn_SignIn（任务14）
     [SerializeField] private Text signInText;             // 签到按钮文本 Text_SignIn（任务14）
+    [SerializeField] private GameObject achievementPanel; // 成就面板 AchievementPanel（任务15C）
+    [SerializeField] private Text achievementListText;    // 成就列表文本 AchievementListText（任务15C）
 
     private Camera cam;
     private string currentRoom;
@@ -107,7 +110,7 @@ public class UIManager : MonoBehaviour
         if (closeDrawerArea != null) closeDrawerArea.SetActive(false);
     }
 
-    /// <summary>关闭全部五个功能面板（不关抽屉）——抽屉打开分支与 CloseAllPanelsAndDrawer 共用</summary>
+    /// <summary>关闭全部六个功能面板（不关抽屉）——抽屉打开分支与 CloseAllPanelsAndDrawer 共用（任务15C 起含成就面板）</summary>
     private void CloseAllPanels()
     {
         CloseFeedPanel();
@@ -115,6 +118,7 @@ public class UIManager : MonoBehaviour
         CloseYardPanel();
         CloseBedroomPanel();
         CloseShopPanel();
+        CloseAchievementPanel(); // 任务15C：开其他面板/开抽屉时成就面板一并关闭
     }
 
     /// <summary>Bug-3 修复：打开任一房间面板前统一调用——关闭全部五个功能面板，并关抽屉（DrawerPanel 置不激活 + 隐藏抽屉外透明点击区，复用 CloseDrawer 任务6语义）</summary>
@@ -176,7 +180,18 @@ public class UIManager : MonoBehaviour
         gd.hunger = Mathf.Max(0f, gd.hunger + hungerGain);
         if (moodGain > 0f) gd.mood = Mathf.Max(0f, gd.mood + moodGain);
         gd.Save(); // 立即存档
-        if (feedFeedbackText != null) feedFeedbackText.text = "喂食成功";
+        gd.AddFeedCount(); // 任务15B：互动成功计数（成就系统）
+        if (feedFeedbackText != null)
+        {
+            feedFeedbackText.text = "喂食成功" + GetAchievementProgressSuffix("feed"); // 任务15D：反馈带成就进度
+            string msg = gd.ConsumeAchievementMessage(); // 任务15D：本次解锁的成就提示追加（取走即清空）
+            if (!string.IsNullOrEmpty(msg)) feedFeedbackText.text += " · " + msg;
+        }
+        // 任务15E：互动成功飘字——加值向上飘；cost>0 再飘一条扣金币向下（金币不足已在上方 return，到不了这里）
+        string gainText = "+" + hungerGain + " 食物";
+        if (moodGain > 0f) gainText += " +" + moodGain + " 心情";
+        SpawnFloatingText(gainText, FloatGainColor, 0f, 200f, 120f, 1.5f);
+        if (cost > 0L) SpawnFloatingText("-" + cost + " 金币", FloatCostColor, 0f, 100f, -120f, 1.5f);
     }
 
     private void OnGUI()
@@ -225,7 +240,18 @@ public class UIManager : MonoBehaviour
         gd.health = Mathf.Max(0f, gd.health + healthGain);
         if (moodGain > 0f) gd.mood = Mathf.Max(0f, gd.mood + moodGain);
         gd.Save(); // 立即存档
-        if (bathFeedbackText != null) bathFeedbackText.text = "洗澡成功";
+        gd.AddBathCount(); // 任务15B：互动成功计数（成就系统）
+        if (bathFeedbackText != null)
+        {
+            bathFeedbackText.text = "洗澡成功" + GetAchievementProgressSuffix("bath"); // 任务15D：反馈带成就进度
+            string msg = gd.ConsumeAchievementMessage(); // 任务15D：本次解锁的成就提示追加（取走即清空）
+            if (!string.IsNullOrEmpty(msg)) bathFeedbackText.text += " · " + msg;
+        }
+        // 任务15E：互动成功飘字——加值向上飘；cost>0 再飘一条扣金币向下（金币不足已在上方 return，到不了这里）
+        string gainText = "+" + healthGain + " 健康";
+        if (moodGain > 0f) gainText += " +" + moodGain + " 心情";
+        SpawnFloatingText(gainText, FloatGainColor, 0f, 200f, 120f, 1.5f);
+        if (cost > 0L) SpawnFloatingText("-" + cost + " 金币", FloatCostColor, 0f, 100f, -120f, 1.5f);
     }
 
     // ---------------- 院子逗鸡（任务8） ----------------
@@ -265,7 +291,16 @@ public class UIManager : MonoBehaviour
         gd.coins -= cost; // 免费项为 0，等效不扣
         gd.mood = Mathf.Max(0f, gd.mood + moodGain);
         gd.Save(); // 立即存档
-        if (yardFeedbackText != null) yardFeedbackText.text = "逗鸡成功，小鸡很开心！";
+        gd.AddYardCount(); // 任务15B：互动成功计数（成就系统）
+        if (yardFeedbackText != null)
+        {
+            yardFeedbackText.text = "逗鸡成功，小鸡很开心！" + GetAchievementProgressSuffix("yard"); // 任务15D：反馈带成就进度
+            string msg = gd.ConsumeAchievementMessage(); // 任务15D：本次解锁的成就提示追加（取走即清空）
+            if (!string.IsNullOrEmpty(msg)) yardFeedbackText.text += " · " + msg;
+        }
+        // 任务15E：互动成功飘字——加值向上飘；免费项（cost==0）只飘加值，不飘扣金币
+        SpawnFloatingText("+" + moodGain + " 心情", FloatGainColor, 0f, 200f, 120f, 1.5f);
+        if (cost > 0L) SpawnFloatingText("-" + cost + " 金币", FloatCostColor, 0f, 100f, -120f, 1.5f);
     }
 
     // ---------------- 卧室睡觉（任务9） ----------------
@@ -306,7 +341,18 @@ public class UIManager : MonoBehaviour
         gd.health = Mathf.Max(0f, gd.health + healthGain);
         gd.mood = Mathf.Max(0f, gd.mood + moodGain);
         gd.Save(); // 立即存档
-        if (bedroomFeedbackText != null) bedroomFeedbackText.text = "小鸡睡得好香！";
+        gd.AddSleepCount(); // 任务15B：互动成功计数（成就系统）
+        if (bedroomFeedbackText != null)
+        {
+            bedroomFeedbackText.text = "小鸡睡得好香！" + GetAchievementProgressSuffix("sleep"); // 任务15D：反馈带成就进度
+            string msg = gd.ConsumeAchievementMessage(); // 任务15D：本次解锁的成就提示追加（取走即清空）
+            if (!string.IsNullOrEmpty(msg)) bedroomFeedbackText.text += " · " + msg;
+        }
+        // 任务15E：互动成功飘字——加值向上飘；免费项（cost==0）只飘加值，不飘扣金币
+        string gainText = "+" + healthGain + " 健康";
+        if (moodGain > 0f) gainText += " +" + moodGain + " 心情";
+        SpawnFloatingText(gainText, FloatGainColor, 0f, 200f, 120f, 1.5f);
+        if (cost > 0L) SpawnFloatingText("-" + cost + " 金币", FloatCostColor, 0f, 100f, -120f, 1.5f);
     }
 
     // ---------------- 商店（阶段三任务10） ----------------
@@ -545,6 +591,112 @@ public class UIManager : MonoBehaviour
             signInText.text = "已签到";
             signInButton.interactable = false;
         }
+    }
+
+    // ---------------- 成就面板（阶段四任务15C） ----------------
+
+    /// <summary>打开成就面板：先关全部功能面板与抽屉，再刷新成就列表，最后激活面板</summary>
+    public void OpenAchievementPanel()
+    {
+        CloseAllPanelsAndDrawer();
+        RefreshAchievementPanel();
+        if (achievementPanel != null) achievementPanel.SetActive(true);
+    }
+
+    /// <summary>关闭成就面板</summary>
+    public void CloseAchievementPanel()
+    {
+        if (achievementPanel != null) achievementPanel.SetActive(false);
+    }
+
+    /// <summary>刷新成就列表：每行「名字 进度/目标 状态」（状态=已达成/未完成），多行用 \n 拼接，写入 achievementListText</summary>
+    public void RefreshAchievementPanel()
+    {
+        var gd = GameData.Instance;
+        if (achievementListText == null || gd == null) return;
+        achievementListText.color = Color.white; // 任务15D：半透明黑底上列表文字改白，保证可读
+        if (achievementPanel != null) // 任务15D：标题同样改白（运行时着色，不改场景）
+        {
+            var titleTr = achievementPanel.transform.Find("Title");
+            var titleText = titleTr != null ? titleTr.GetComponent<Text>() : null;
+            if (titleText != null) titleText.color = Color.white;
+        }
+        string text = "";
+        foreach (var def in GameData.AchievementDefs)
+        {
+            if (text.Length > 0) text += "\n";
+            text += def.name + " " + gd.GetAchievementProgress(def.id) + "/" + def.target + " "
+                    + (gd.IsAchievementUnlocked(def.id) ? "已达成" : "未完成");
+        }
+        achievementListText.text = text;
+    }
+
+    // ---------------- 成就反馈（阶段四任务15D） ----------------
+
+    /// <summary>互动成功反馈的成就进度后缀（任务15D）：feed 按当前进度显示下一目标，bath/yard/sleep 固定 /10；未知类型返回空串</summary>
+    private string GetAchievementProgressSuffix(string type)
+    {
+        var gd = GameData.Instance;
+        if (gd == null) return "";
+        switch (type)
+        {
+            case "feed":
+                if (gd.feedCount < 10) return "（新手饲养员 " + gd.feedCount + "/10）";
+                if (gd.feedCount < 100) return "（金牌饲养员 " + gd.feedCount + "/100）";
+                return "（喂食成就已全达成）";
+            case "bath": return "（爱干净 " + gd.bathCount + "/10）";
+            case "yard": return "（游戏伙伴 " + gd.yardCount + "/10）";
+            case "sleep": return "（安睡天使 " + gd.sleepCount + "/10）";
+            default: return "";
+        }
+    }
+
+    // ---------------- 互动飘字反馈（阶段四任务15E） ----------------
+
+    private static readonly Color FloatGainColor = new Color(0.3f, 1f, 0.3f); // 加值飘字颜色（工单指定绿）
+    private static readonly Color FloatCostColor = new Color(1f, 0.3f, 0.3f); // 扣金币飘字颜色（工单指定红）
+
+    /// <summary>
+    /// 互动成功飘字（任务15E）：Canvas 下动态创建 400×80 Text，duration 秒内 y 从 startY 线性到 startY+deltaY、
+    /// alpha 1→0 渐隐后自毁。字体取 feedFeedbackText.font，为空退 bathFeedbackText.font，仍为空静默返回。
+    /// </summary>
+    private void SpawnFloatingText(string content, Color color, float startX, float startY, float deltaY, float duration)
+    {
+        Font font = feedFeedbackText != null ? feedFeedbackText.font : null;
+        if (font == null && bathFeedbackText != null) font = bathFeedbackText.font;
+        if (font == null) return; // 无可用字体：放弃飘字，不报错
+        var go = new GameObject("FloatingText");
+        go.transform.SetParent(transform, false); // UIManager 挂在 Canvas 上 → 飘字即 Canvas 子物体
+        var text = go.AddComponent<Text>();        // Graphic 依赖自动补 RectTransform + CanvasRenderer
+        text.raycastTarget = false;               // 任务15F：飘字不拦截射线，存续期不挡面板按钮点击
+        var rt = text.rectTransform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f); // 锚点居中
+        rt.anchoredPosition = new Vector2(startX, startY);
+        rt.sizeDelta = new Vector2(400f, 80f);
+        text.font = font;
+        text.fontSize = 48;
+        text.alignment = TextAnchor.MiddleCenter;
+        text.color = color;
+        text.text = content;
+        StartCoroutine(FloatTextRoutine(text, startY, deltaY, duration)); // 协程驱动动画（本单专属授权，仅此飘字使用）
+    }
+
+    /// <summary>飘字动画协程（任务15E，仅 SpawnFloatingText 调用）：y 线性位移 + alpha 1→0，结束后 Destroy</summary>
+    private System.Collections.IEnumerator FloatTextRoutine(Text text, float startY, float deltaY, float duration)
+    {
+        var rt = (RectTransform)text.transform;
+        var c = text.color;
+        float t = 0f;
+        while (t < duration)
+        {
+            t += Time.deltaTime;
+            float k = Mathf.Clamp01(t / duration);
+            rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, startY + deltaY * k);
+            c.a = 1f - k;
+            text.color = c;
+            yield return null;
+        }
+        Destroy(rt.gameObject);
     }
 
     // ---------------- 测试开关（临时代码，交付前删除） ----------------

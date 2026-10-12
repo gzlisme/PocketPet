@@ -33,6 +33,14 @@ public class GameData : MonoBehaviour
     public long lastSignInDateTicks = 0; // 上次签到日的本地日期（当天 0 点，DateTime.Today.Ticks；0=从未签到）
     public int signInStreak = 0;         // 当前连签天数（1~7 一周一轮；0=从未签到/旧档无此键）
 
+    // ---- 成就字段（阶段四任务15A）----
+    public int feedCount = 0;                 // 累计喂食次数
+    public int bathCount = 0;                 // 累计洗澡次数
+    public int yardCount = 0;                 // 累计逗鸡次数
+    public int sleepCount = 0;                // 累计睡觉次数
+    public string unlockedAchievements = "";  // 已解锁成就 id，逗号分隔（空串 = 尚无成就）
+    private string pendingAchievementMessage = ""; // 待提示的成就解锁消息缓存（任务15D，不存档；ConsumeAchievementMessage 取走即清空）
+
     // ---- 衰减速率与离线上限（工单指定）----
     private const float HungerDecayPerSec = 0.01f;
     private const float HealthDecayPerSec = 0.005f;
@@ -54,6 +62,11 @@ public class GameData : MonoBehaviour
     private const string KeyDebugDayOffset = "pp_debugDayOffset"; // 任务11
     private const string KeyLastSignInDate = "pp_lastSignInDateTicks"; // 任务14
     private const string KeySignInStreak = "pp_signInStreak";           // 任务14
+    private const string KeyFeedCount = "pp_feedCount";                 // 任务15A
+    private const string KeyBathCount = "pp_bathCount";                 // 任务15A
+    private const string KeyYardCount = "pp_yardCount";                 // 任务15A
+    private const string KeySleepCount = "pp_sleepCount";               // 任务15A
+    private const string KeyUnlockedAchievements = "pp_unlockedAchievements"; // 任务15A
 
     private void Awake()
     {
@@ -94,6 +107,11 @@ public class GameData : MonoBehaviour
         PlayerPrefs.SetInt(KeyDebugDayOffset, debugDayOffset);
         PlayerPrefs.SetString(KeyLastSignInDate, lastSignInDateTicks.ToString()); // 任务14：long 沿用字符串存档风格
         PlayerPrefs.SetInt(KeySignInStreak, signInStreak);
+        PlayerPrefs.SetInt(KeyFeedCount, feedCount);               // 任务15A
+        PlayerPrefs.SetInt(KeyBathCount, bathCount);
+        PlayerPrefs.SetInt(KeyYardCount, yardCount);
+        PlayerPrefs.SetInt(KeySleepCount, sleepCount);
+        PlayerPrefs.SetString(KeyUnlockedAchievements, unlockedAchievements);
         PlayerPrefs.Save();
     }
 
@@ -114,6 +132,11 @@ public class GameData : MonoBehaviour
         debugDayOffset = PlayerPrefs.GetInt(KeyDebugDayOffset, debugDayOffset); // 旧档缺键→保持 0
         if (long.TryParse(PlayerPrefs.GetString(KeyLastSignInDate, ""), out var lsd)) lastSignInDateTicks = lsd; // 旧档缺键→保持 0
         signInStreak = PlayerPrefs.GetInt(KeySignInStreak, signInStreak); // 旧档缺键→保持 0
+        feedCount = PlayerPrefs.GetInt(KeyFeedCount, feedCount);                     // 旧档缺键→保持 0（任务15A）
+        bathCount = PlayerPrefs.GetInt(KeyBathCount, bathCount);                     // 旧档缺键→保持 0
+        yardCount = PlayerPrefs.GetInt(KeyYardCount, yardCount);                     // 旧档缺键→保持 0
+        sleepCount = PlayerPrefs.GetInt(KeySleepCount, sleepCount);                 // 旧档缺键→保持 0
+        unlockedAchievements = PlayerPrefs.GetString(KeyUnlockedAchievements, unlockedAchievements); // 旧档缺键→保持空串
     }
 
     /// <summary>离线衰减：按上次存档至今的秒数 × 同速率扣除，最多按 8 小时计</summary>
@@ -190,6 +213,100 @@ public class GameData : MonoBehaviour
         lastSignInDateTicks = today;
         coins += reward;
         Save(); // 立即存档
+        CheckAndGrantAchievements(); // 任务15B：签到后检测并发放成就（sign_7 全勤奖）
         return reward;
+    }
+
+    // ---------------- 成就（阶段四任务15A） ----------------
+
+    /// <summary>累计喂食次数 +1（任务15B：+1 后检测并发放成就）</summary>
+    public void AddFeedCount() { feedCount += 1; CheckAndGrantAchievements(); }
+
+    /// <summary>累计洗澡次数 +1（任务15B：+1 后检测并发放成就）</summary>
+    public void AddBathCount() { bathCount += 1; CheckAndGrantAchievements(); }
+
+    /// <summary>累计逗鸡次数 +1（任务15B：+1 后检测并发放成就）</summary>
+    public void AddYardCount() { yardCount += 1; CheckAndGrantAchievements(); }
+
+    /// <summary>累计睡觉次数 +1（任务15B：+1 后检测并发放成就）</summary>
+    public void AddSleepCount() { sleepCount += 1; CheckAndGrantAchievements(); }
+
+    /// <summary>成就是否已解锁：unlockedAchievements 按逗号拆分精确比对；空串（尚无成就）返回 false</summary>
+    public bool IsAchievementUnlocked(string id)
+    {
+        if (unlockedAchievements == "") return false; // 空串 = 尚无任何成就
+        foreach (var s in unlockedAchievements.Split(','))
+        {
+            if (s == id) return true;
+        }
+        return false;
+    }
+
+    /// <summary>解锁成就：已解锁直接返回；否则追加到 unlockedAchievements（空串则直接赋值）。不自动存档、不发奖励（由后续工单决定）</summary>
+    public void UnlockAchievement(string id)
+    {
+        if (IsAchievementUnlocked(id)) return; // 已解锁，不重复
+        unlockedAchievements = (unlockedAchievements == "") ? id : unlockedAchievements + "," + id;
+    }
+
+    // ---------------- 成就定义与发放（阶段四任务15B） ----------------
+
+    /// <summary>成就定义（任务15B）：id 唯一标识 / name 显示名 / target 达成所需次数 / reward 解锁时发放的金币</summary>
+    public class AchievementDef
+    {
+        public string id;     // 成就 id，如 "feed_10"
+        public string name;   // 显示名，如 "新手饲养员"
+        public int target;    // 达成所需次数
+        public long reward;   // 解锁时的金币奖励
+    }
+
+    /// <summary>全部成就定义表（任务15B，6 项）：喂食×2 / 洗澡 / 逗鸡 / 睡觉 / 签到</summary>
+    public static readonly AchievementDef[] AchievementDefs =
+    {
+        new AchievementDef { id = "feed_10",  name = "新手饲养员", target = 10,  reward = 10000L },
+        new AchievementDef { id = "feed_100", name = "金牌饲养员", target = 100, reward = 100000L },
+        new AchievementDef { id = "bath_10",  name = "爱干净",     target = 10,  reward = 10000L },
+        new AchievementDef { id = "yard_10",  name = "游戏伙伴",   target = 10,  reward = 10000L },
+        new AchievementDef { id = "sleep_10", name = "安睡天使",   target = 10,  reward = 10000L },
+        new AchievementDef { id = "sign_7",   name = "全勤奖",     target = 7,   reward = 100000L },
+    };
+
+    /// <summary>成就当前进度（任务15B；任务15C 经老板改单由 private 转 public 供 UI 直调）：id → 对应计数字段；未知 id 返回 0</summary>
+    public int GetAchievementProgress(string id)
+    {
+        switch (id)
+        {
+            case "feed_10":
+            case "feed_100": return feedCount;
+            case "bath_10":  return bathCount;
+            case "yard_10":  return yardCount;
+            case "sleep_10": return sleepCount;
+            case "sign_7":   return signInStreak;
+            default:         return 0;
+        }
+    }
+
+    /// <summary>检测并发放成就（任务15B）：遍历定义表，已解锁跳过；未解锁且进度≥target → UnlockAchievement、金币入账、立即存档；一次可解锁多个，循环不提前退出</summary>
+    private void CheckAndGrantAchievements()
+    {
+        foreach (var def in AchievementDefs)
+        {
+            if (IsAchievementUnlocked(def.id)) continue;
+            if (GetAchievementProgress(def.id) < def.target) continue;
+            UnlockAchievement(def.id);
+            coins += def.reward;
+            Save();
+            // 任务15D：解锁时缓存提示消息供 UI 反馈文本显示（多个用"；"分隔；解锁逻辑本身不变）
+            string oneMessage = "成就达成：" + def.name + " +" + def.reward + "金币";
+            pendingAchievementMessage = (pendingAchievementMessage == "") ? oneMessage : pendingAchievementMessage + "；" + oneMessage;
+        }
+    }
+
+    /// <summary>取走待提示的成就解锁消息并清空缓存（任务15D；无消息时返回空串）</summary>
+    public string ConsumeAchievementMessage()
+    {
+        string message = pendingAchievementMessage;
+        pendingAchievementMessage = "";
+        return message;
     }
 }
