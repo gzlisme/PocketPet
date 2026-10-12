@@ -41,6 +41,9 @@ public class GameData : MonoBehaviour
     public string unlockedAchievements = "";  // 已解锁成就 id，逗号分隔（空串 = 尚无成就）
     private string pendingAchievementMessage = ""; // 待提示的成就解锁消息缓存（任务15D，不存档；ConsumeAchievementMessage 取走即清空）
 
+    // ---- 碎碎念字段（阶段四任务16A）----
+    public string diaryEntries = "";       // 碎碎念记录："日期|内容;日期|内容"，最多保留最近 30 条（空串 = 尚无记录）
+
     // ---- 衰减速率与离线上限（工单指定）----
     private const float HungerDecayPerSec = 0.01f;
     private const float HealthDecayPerSec = 0.005f;
@@ -67,6 +70,7 @@ public class GameData : MonoBehaviour
     private const string KeyYardCount = "pp_yardCount";                 // 任务15A
     private const string KeySleepCount = "pp_sleepCount";               // 任务15A
     private const string KeyUnlockedAchievements = "pp_unlockedAchievements"; // 任务15A
+    private const string KeyDiaryEntries = "pp_diaryEntries";                // 任务16A
 
     private void Awake()
     {
@@ -112,6 +116,7 @@ public class GameData : MonoBehaviour
         PlayerPrefs.SetInt(KeyYardCount, yardCount);
         PlayerPrefs.SetInt(KeySleepCount, sleepCount);
         PlayerPrefs.SetString(KeyUnlockedAchievements, unlockedAchievements);
+        PlayerPrefs.SetString(KeyDiaryEntries, diaryEntries);          // 任务16A：碎碎念存档
         PlayerPrefs.Save();
     }
 
@@ -137,6 +142,7 @@ public class GameData : MonoBehaviour
         yardCount = PlayerPrefs.GetInt(KeyYardCount, yardCount);                     // 旧档缺键→保持 0
         sleepCount = PlayerPrefs.GetInt(KeySleepCount, sleepCount);                 // 旧档缺键→保持 0
         unlockedAchievements = PlayerPrefs.GetString(KeyUnlockedAchievements, unlockedAchievements); // 旧档缺键→保持空串
+        diaryEntries = PlayerPrefs.GetString(KeyDiaryEntries, diaryEntries); // 旧档缺键→保持空串（任务16A）
     }
 
     /// <summary>离线衰减：按上次存档至今的秒数 × 同速率扣除，最多按 8 小时计</summary>
@@ -308,5 +314,38 @@ public class GameData : MonoBehaviour
         string message = pendingAchievementMessage;
         pendingAchievementMessage = "";
         return message;
+    }
+
+    // ---------------- 碎碎念（阶段四任务16A） ----------------
+
+    /// <summary>今天是否已签到（任务16A）：CanSignInToday 的反义，复用原判定，不改签到逻辑</summary>
+    public bool HasSignedInToday()
+    {
+        return !CanSignInToday();
+    }
+
+    /// <summary>
+    /// 追加一条碎碎念（任务16A）：空/空白输入返回 -1，不记录不发奖；超 50 字截断；
+    /// 按 "yyyy-MM-dd|内容" 组装并以 ";" 追加，只保留最近 30 条；
+    /// 每天第一条碎碎念触发签到奖励（当天已签则奖励为 0），最后 Save 并返回本次奖励。
+    /// </summary>
+    public long AddDiaryEntry(string content)
+    {
+        if (content == null || content.Trim().Length == 0) return -1; // 无效输入：不记录、不发奖
+        if (content.Length > 50) content = content.Substring(0, 50);  // 超长截断到 50 字
+        string entry = DateTime.Today.ToString("yyyy-MM-dd") + "|" + content;
+        diaryEntries = (diaryEntries == "") ? entry : diaryEntries + ";" + entry;
+        string[] parts = diaryEntries.Split(';');
+        if (parts.Length > 30) // 超出 30 条：丢弃最旧的，保留最后 30 条重新拼接
+            diaryEntries = string.Join(";", parts, parts.Length - 30, 30);
+        long reward = CanSignInToday() ? DoSignIn() : 0; // 每天第一条碎碎念 = 当天签到，拿签到奖励
+        Save();
+        return reward;
+    }
+
+    /// <summary>返回碎碎念原始字符串（任务16A，格式 "日期|内容;日期|内容"，供 UI 解析）</summary>
+    public string GetDiaryEntries()
+    {
+        return diaryEntries;
     }
 }

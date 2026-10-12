@@ -37,6 +37,9 @@ public class UIManager : MonoBehaviour
     [SerializeField] private Text signInText;             // 签到按钮文本 Text_SignIn（任务14）
     [SerializeField] private GameObject achievementPanel; // 成就面板 AchievementPanel（任务15C）
     [SerializeField] private Text achievementListText;    // 成就列表文本 AchievementListText（任务15C）
+    [SerializeField] private GameObject diaryPanel;      // 碎碎念面板 DiaryPanel（任务16B）
+    [SerializeField] private InputField diaryInputField; // 碎碎念输入框 InputField_Diary（任务16B）
+    [SerializeField] private Text diaryListText;          // 碎碎念列表文本 DiaryListText（任务16B）
 
     private Camera cam;
     private string currentRoom;
@@ -119,6 +122,7 @@ public class UIManager : MonoBehaviour
         CloseBedroomPanel();
         CloseShopPanel();
         CloseAchievementPanel(); // 任务15C：开其他面板/开抽屉时成就面板一并关闭
+        CloseDiaryPanel();       // 任务16B：开其他面板/开抽屉时碎碎念面板一并关闭
     }
 
     /// <summary>Bug-3 修复：打开任一房间面板前统一调用——关闭全部五个功能面板，并关抽屉（DrawerPanel 置不激活 + 隐藏抽屉外透明点击区，复用 CloseDrawer 任务6语义）</summary>
@@ -576,21 +580,12 @@ public class UIManager : MonoBehaviour
         RefreshSignInButton();
     }
 
-    /// <summary>按 GameData 状态刷新签到按钮：可签→"签到（+奖励）"可点；已签→"已签到"置灰不可点</summary>
+    /// <summary>刷新抽屉入口按钮（任务16B：签到入口已改名碎碎念）——始终显示"碎碎念"且可点（签到并入发布流程，不再按签到状态置灰）</summary>
     public void RefreshSignInButton()
     {
-        var gd = GameData.Instance;
-        if (gd == null || signInButton == null || signInText == null) return;
-        if (gd.CanSignInToday())
-        {
-            signInText.text = "签到（+" + gd.GetTodayReward() + "）";
-            signInButton.interactable = true;
-        }
-        else
-        {
-            signInText.text = "已签到";
-            signInButton.interactable = false;
-        }
+        if (signInButton == null || signInText == null) return;
+        signInText.text = "碎碎念";
+        signInButton.interactable = true;
     }
 
     // ---------------- 成就面板（阶段四任务15C） ----------------
@@ -697,6 +692,60 @@ public class UIManager : MonoBehaviour
             yield return null;
         }
         Destroy(rt.gameObject);
+    }
+
+    // ---------------- 碎碎念面板（阶段四任务16B） ----------------
+
+    /// <summary>打开碎碎念面板：关全部功能面板与抽屉、刷新列表、激活面板</summary>
+    public void OpenDiaryPanel()
+    {
+        CloseAllPanelsAndDrawer();
+        RefreshDiaryPanel();
+        if (diaryPanel != null) diaryPanel.SetActive(true);
+    }
+
+    /// <summary>关闭碎碎念面板</summary>
+    public void CloseDiaryPanel()
+    {
+        if (diaryPanel != null) diaryPanel.SetActive(false);
+    }
+
+    /// <summary>刷新碎碎念列表：按 ";" 拆分、倒序（最新在最上），每行"日期 内容"，空记录显示提示语</summary>
+    public void RefreshDiaryPanel()
+    {
+        if (diaryListText == null) return;
+        var gd = GameData.Instance;
+        if (gd == null) return;
+        string raw = gd.GetDiaryEntries();
+        if (raw == "")
+        {
+            diaryListText.text = "还没有碎碎念，写一条吧";
+            return;
+        }
+        string[] parts = raw.Split(';');
+        string text = "";
+        for (int i = parts.Length - 1; i >= 0; i--)
+        {
+            if (text.Length > 0) text += "\n";
+            text += parts[i].Replace("|", " ");
+        }
+        diaryListText.text = text;
+    }
+
+    /// <summary>发布碎碎念：空白输入直接返回；否则入账（每天第一条附带签到奖励）、清空输入框、刷新列表；reward>0 飘金币、reward==0 飘"已记录"</summary>
+    public void OnClickPostDiary()
+    {
+        var gd = GameData.Instance;
+        if (gd == null || diaryInputField == null) return;
+        string content = diaryInputField.text;
+        if (string.IsNullOrWhiteSpace(content)) return;
+        long reward = gd.AddDiaryEntry(content);
+        diaryInputField.text = "";
+        RefreshDiaryPanel();
+        if (reward > 0)
+            SpawnFloatingText("+" + reward + " 金币", new Color(1f, 0.85f, 0.3f), 0f, 200f, 120f, 1.5f);
+        else if (reward == 0)
+            SpawnFloatingText("已记录", Color.white, 0f, 200f, 120f, 1.5f);
     }
 
     // ---------------- 测试开关（临时代码，交付前删除） ----------------
