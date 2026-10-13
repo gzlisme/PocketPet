@@ -1,4 +1,3 @@
-using System;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -9,9 +8,9 @@ using UnityEngine.UI;
 /// - OpenFeedPanel/FeedNormal/FeedPremium/CloseFeedPanel：餐厅喂食（任务6.2，扣金币加状态并立即存档）
 /// - OpenBathPanel/BathNormal/BathPremium/CloseBathPanel：浴室洗澡（任务7+17D，扣金币加清洁度（递减）并立即存档，健康不再直接加）
 /// - OpenYardPanel/PlayFree/PlayPremium/CloseYardPanel：院子逗鸡（任务8，扣金币加心情并立即存档）
-/// - OpenBedroomPanel/CloseBedroomPanel：卧室面板（任务9+17D+17F：睡觉改全局被动机制，两睡觉按钮已删；SleepNormal/SleepDeep/TrySleep 保留为死代码）
+/// - OpenBedroomPanel/CloseBedroomPanel：卧室面板（任务9+17D+17F：睡觉改全局被动机制，两睡觉按钮已删）
 /// - OpenShopPanel/CloseShopPanel/BuyOrToggleItem/RefreshChickDecoration：商店（任务10，买装饰、装备/卸下、小鸡色块显示）
-/// - OnClickSignIn/RefreshSignInButton：抽屉内每日签到（任务14，领10万金币，第7天连签再+100万，已签置灰）
+/// - RefreshSignInButton：抽屉内碎碎念入口按钮刷新（任务16B：恒显"碎碎念"可点，签到并入发布流程）
 /// - OpenAchievementPanel/CloseAchievementPanel/RefreshAchievementPanel：成就面板（任务15C，成就名称/进度/状态列表）
 /// - ShowDeathPopup/CloseDeathPopup/OnClickRebirth：死亡与领养新蛋（任务17E，health=0 死亡弹窗、重置回蛋）
 /// - OnClickPatChick：抚摸小鸡（任务17F-补丁+17G，每天 3 次、每次 +5 心情，卧室面板按钮）
@@ -324,7 +323,7 @@ public class UIManager : MonoBehaviour
         if (cost > 0L) SpawnFloatingText("-" + cost + " 金币", FloatCostColor, 0f, 100f, -120f, 1.5f);
     }
 
-    // ---------------- 卧室睡觉（任务9；任务17F：场景两睡觉按钮已删，SleepNormal/SleepDeep/TrySleep 保留为死代码待后续清理单） ----------------
+    // ---------------- 卧室睡觉（任务9；任务17F：睡觉改全局被动机制，场景两睡觉按钮已删） ----------------
 
     /// <summary>打开睡觉面板（清空上次提示）</summary>
     public void OpenBedroomPanel()
@@ -340,24 +339,6 @@ public class UIManager : MonoBehaviour
     public void CloseBedroomPanel()
     {
         if (bedroomPanel != null) bedroomPanel.SetActive(false);
-    }
-
-    /// <summary>打个盹（任务17D：睡觉不再加值/扣钱，仅展示小鸡状态）</summary>
-    public void SleepNormal() { TrySleep(0L, 10f, 5f); }
-
-    /// <summary>深度睡眠（任务17D：睡觉不再加值/扣钱，仅展示小鸡状态）</summary>
-    public void SleepDeep() { TrySleep(5000L, 30f, 15f); }
-
-    /// <summary>睡觉核心（任务17D）：不加值不扣钱，仅按本地时间展示小鸡睡觉（20:00–6:00）/醒着状态</summary>
-    private void TrySleep(long cost, float healthGain, float moodGain)
-    {
-        var gd = GameData.Instance;
-        if (gd == null || gd.isDead || bedroomFeedbackText == null) return; // 任务17E：死亡期间禁止互动
-        DateTime nowLocal = DateTime.Now;
-        int h = nowLocal.Hour;
-        bool sleepTime = h >= 20 || h < 6;
-        bedroomFeedbackText.text = (sleepTime ? "小鸡在睡觉（20:00-6:00）" : "小鸡醒着")
-            + "｜玩一会就休息吧";
     }
 
     // ---------------- 商店（阶段三任务10） ----------------
@@ -637,16 +618,6 @@ public class UIManager : MonoBehaviour
 
     // ---------------- 签到（阶段三任务14） ----------------
 
-    /// <summary>签到按钮点击：当天已签→直接返回不做事；否则执行签到并刷新按钮显示</summary>
-    public void OnClickSignIn()
-    {
-        var gd = GameData.Instance;
-        if (gd == null) return;
-        if (!gd.CanSignInToday()) return; // 当天已签，不做事
-        gd.DoSignIn();
-        RefreshSignInButton();
-    }
-
     /// <summary>刷新抽屉入口按钮（任务16B：签到入口已改名碎碎念）——始终显示"碎碎念"且可点（签到并入发布流程，不再按签到状态置灰）</summary>
     public void RefreshSignInButton()
     {
@@ -811,7 +782,7 @@ public class UIManager : MonoBehaviour
         diaryInputField.text = "";
         RefreshDiaryPanel();
         if (reward > 0)
-            SpawnFloatingText("+" + reward + " 金币", new Color(1f, 0.85f, 0.3f), 0f, 200f, 120f, 1.5f);
+            SpawnFloatingText("+" + (reward / 10000L) + "万 金币", new Color(1f, 0.85f, 0.3f), 0f, 200f, 120f, 1.5f); // 清理单-01：奖励数字万字化（整数万，不四舍五入）
         else if (reward == 0)
             SpawnFloatingText("已记录", Color.white, 0f, 200f, 120f, 1.5f);
     }

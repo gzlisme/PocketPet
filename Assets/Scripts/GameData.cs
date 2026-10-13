@@ -480,7 +480,7 @@ public class GameData : MonoBehaviour
             coins += def.reward;
             Save();
             // 任务15D：解锁时缓存提示消息供 UI 反馈文本显示（多个用"；"分隔；解锁逻辑本身不变）
-            string oneMessage = "成就达成：" + def.name + " +" + def.reward + "金币";
+            string oneMessage = "成就达成：" + def.name + " +" + (def.reward / 10000L) + "万金币"; // 清理单-01：奖励数字万字化（整数万，不四舍五入）
             pendingAchievementMessage = (pendingAchievementMessage == "") ? oneMessage : pendingAchievementMessage + "；" + oneMessage;
         }
     }
