@@ -47,6 +47,7 @@ screenshots/
 
 # ===== TypeSafe Skill & Jev 配置（本地工具与密钥，不入库） =====
 .agents/
+.workbuddy/
 skills-lock.json
 _jev_usage.log
 .env
