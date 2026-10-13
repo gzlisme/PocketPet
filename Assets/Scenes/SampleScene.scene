@@ -1861,7 +1861,6 @@ MonoBehaviour:
   equippedScarf: 
   equippedGlasses: 
   birthTimeTicks: 0
-  debugDayOffset: 0
   lastSignInDateTicks: 0
   signInStreak: 0
   feedCount: 0

@@ -182,7 +182,7 @@ public class UIManager : MonoBehaviour
     /// <summary>豪华零食：花费 50000 金币，饥饿 +30，心情 +10（任务17：+40→+30）</summary>
     public void FeedPremium() { TryFeed(50000L, 30f, 10f); }
 
-    /// <summary>喂食核心：金币不足→提示不扣钱；足够→扣钱、加状态（钳 100）、立即存档、提示成功</summary>
+    /// <summary>喂食核心：金币不足→提示不扣钱；足够→扣钱、加食物（不封顶）与心情（钳 100）、立即存档、提示成功</summary>
     private void TryFeed(long cost, float hungerGain, float moodGain)
     {
         var gd = GameData.Instance;

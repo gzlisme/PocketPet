@@ -33,7 +33,6 @@ public class GameData : MonoBehaviour
 
     // ---- 进化字段（阶段三任务11；17G 起只剩出生时间——照顾质量分体系已删）----
     public long birthTimeTicks = 0;  // 出生时间戳（首次启动在 Awake 初始化，DateTime.Now）
-    public int debugDayOffset = 0;   // 仅测试用：天数偏移，交付时必须为 0
 
     // ---- 签到字段（阶段三任务14）----
     public long lastSignInDateTicks = 0; // 上次签到日的本地日期（当天 0 点，DateTime.Today.Ticks；0=从未签到）
@@ -91,7 +90,6 @@ public class GameData : MonoBehaviour
     private const string KeyEquippedScarf = "pp_equippedScarf"; // 任务10
     private const string KeyEquippedGlasses = "pp_equippedGlasses"; // 任务10
     private const string KeyBirthTicks = "pp_birthTimeTicks";     // 任务11
-    private const string KeyDebugDayOffset = "pp_debugDayOffset"; // 任务11
     private const string KeyLastSignInDate = "pp_lastSignInDateTicks"; // 任务14
     private const string KeySignInStreak = "pp_signInStreak";           // 任务14
     private const string KeyFeedCount = "pp_feedCount";                 // 任务15A
@@ -352,13 +350,13 @@ public class GameData : MonoBehaviour
 
     // ---------------- 进化计算（阶段三任务11） ----------------
 
-    /// <summary>当前天数：出生至今的自然日数 + 测试偏移，最小 0</summary>
+    /// <summary>当前天数：出生至今的自然日数，最小 0（17J 起删测试偏移）</summary>
     public int GetCurrentDay()
     {
         long day = 0;
         if (birthTimeTicks > 0)
             day = (DateTime.Now.Ticks - birthTimeTicks) / TimeSpan.TicksPerDay;
-        return Mathf.Max(0, (int)day + debugDayOffset);
+        return Mathf.Max(0, (int)day);
     }
 
     /// <summary>成长阶段：Day0 蛋 / Day1~2 幼鸡 / Day3~6 少年鸡 / Day7+ 成年鸡</summary>
