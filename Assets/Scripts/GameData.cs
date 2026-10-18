@@ -96,15 +96,15 @@ public class GameData : MonoBehaviour
     /// <summary>
     /// 心情软天花板：mood ≥ 此值时，一切"加心情"效果归零（食物、清洁照常，不受影响）。
     /// 存在理由：陪散步是免费且原先无限次的，能一路把心情点到 100，心情彻底失去稀缺性。
-    /// 70 = 从低位靠散步/抚摸一天内能补到的上限，再往上必须靠"花金币的零食/泡泡浴"或等第二天。
+    /// 80 = 从低位靠散步/抚摸一天内能补到的上限，再往上必须靠"花金币的零食/泡泡浴"或等第二天。
     /// </summary>
-    public const float MoodSoftCap = 70f;
+    public const float MoodSoftCap = 80f;
 
     /// <summary>陪散步每日上限（次数，不是金币）：免费项必须有日限，否则金币再多也不影响它刷满心情</summary>
-    public const int YardDailyLimit = 5;
+    public const int YardDailyLimit = 8;
 
     /// <summary>陪玩玩具每日上限（次数）：玩具是买断制，若不限次就等于用 300 金币买了个无限心情来源</summary>
-    public const int ToyDailyLimit = 3;
+    public const int ToyDailyLimit = 5;
 
     // ---- 疲劳阈值与倍率（任务17D，连续在线时长）----
     private const double FatigueThreshold1Hours = 16.0;
@@ -609,7 +609,7 @@ public class GameData : MonoBehaviour
         if (lastPatDateTicks != today) { lastPatDateTicks = today; patCountToday = 0; }
         if (patCountToday >= PatDailyLimit) return false;
         patCountToday++;
-        // A+ 软天花板：心情已到 70 就不再涨，但次数照消耗（老板拍板：用户愿意摸就让他摸）
+        // A+ 软天花板：心情已到软天花板（80）就不再涨，但次数照消耗（老板拍板：用户愿意摸就让他摸）
         if (mood < MoodSoftCap) mood = Mathf.Clamp(mood + 5f, 0f, 100f);
         Save();
         return true;
@@ -666,7 +666,7 @@ public class GameData : MonoBehaviour
     /// <summary>
     /// 陪玩一次当前选中的玩具：无玩具 / 次数用完 / id 无效 → 返回 null 且不改任何状态；
     /// 成功 → 次数 +1、按 toyMoodGain 加心情（钳 100）、立即存档，返回玩到的那件玩具。
-    /// 注意：玩具**不受** MoodSoftCap 限制 —— 花钱买的那部分心情本来就该能突破免费项的 70 天花板。
+    /// 注意：玩具**不受** MoodSoftCap 限制 —— 花钱买的那部分心情本来就该能突破免费项的软天花板。
     /// </summary>
     public ShopItem PlayToy()
     {

@@ -25,13 +25,16 @@ public class ShopItem
         new ShopItem { id = "hat_red",       displayName = "红色帽子", price = 800L,     slot = "hat",     color = new Color(1f, 0f, 0f) },              // #FF0000
         new ShopItem { id = "scarf_blue",    displayName = "蓝色围巾", price = 2000L,    slot = "scarf",   color = new Color(0f, 0f, 1f) },              // #0000FF
         new ShopItem { id = "glasses_black", displayName = "黑色墨镜", price = 4000L,    slot = "glasses", color = new Color(0f, 0f, 0f) },             // #000000
-        new ShopItem { id = "hat_gold",      displayName = "金色帽子", price = 7000L,    slot = "hat",     color = new Color(1f, 215f / 255f, 0f) },    // #FFD700
-        new ShopItem { id = "scarf_purple",  displayName = "紫色围巾", price = 10000L,   slot = "scarf",   color = new Color(128f / 255f, 0f, 128f / 255f) }, // #800080
+        new ShopItem { id = "hat_gold",      displayName = "金色帽子", price = 4000L,    slot = "hat",     color = new Color(1f, 215f / 255f, 0f) },    // #FFD700（2026-10-19 调价 7000→4000，老板拍板）
+        new ShopItem { id = "scarf_purple",  displayName = "紫色围巾", price = 6000L,    slot = "scarf",   color = new Color(128f / 255f, 0f, 128f / 255f) }, // #800080（2026-10-19 调价 10000→6000，老板拍板）
 
         // ---- 玩具（wb 分支：豪华玩具下线，改由商店购买）----
-        // 买断制，每天可陪玩 3 次；玩具不受心情软天花板（70）限制，是玩家"花钱突破上限"的唯一途径。
+        // 买断制，每天可陪玩 5 次；玩具不受心情软天花板（80）限制，是玩家"花钱突破上限"的唯一途径。
+        // 价格与加成必须同向递增，否则会出现"贵但亏"的陷阱商品（2026-10-19 老板拍板加中价位两档）。
         new ShopItem { id = "toy_ball",      displayName = "花皮球",   price = 300L,     slot = "toy",     color = new Color(1f, 90f / 255f, 90f / 255f), toyMoodGain = 15f },
         new ShopItem { id = "toy_frisbee",   displayName = "小飞盘",   price = 800L,     slot = "toy",     color = new Color(0f, 206f / 255f, 209f / 255f), toyMoodGain = 30f },
+        new ShopItem { id = "toy_rattle",    displayName = "拨浪鼓",   price = 1200L,    slot = "toy",     color = new Color(210f / 255f, 105f / 255f, 30f / 255f), toyMoodGain = 40f }, // #D2691E
+        new ShopItem { id = "toy_swing",     displayName = "小秋千",   price = 2000L,    slot = "toy",     color = new Color(76f / 255f, 175f / 255f, 80f / 255f), toyMoodGain = 50f },  // #4CAF50
     };
 
     /// <summary>全部玩具（供院子/商店展示用）</summary>
