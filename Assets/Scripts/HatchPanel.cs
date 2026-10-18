@@ -54,11 +54,13 @@ public class HatchPanel : MonoBehaviour
     // ---- 揭晓阶段 ----
     private Text revealRarityText;
     private Text revealNameText;
+    private Text revealFirstLineText;   // 破壳第一句话（Loop 4 核心）
     private Text revealDescText;
     private Text revealWishText;
 
     // ---- 运行数据 ----
     private string currentWish = "";
+    private string cachedFirstLine = "";   // 本会话内固定的第一句话（Loop 5 改为持久化）
     private PetSpecies.Def result;
 
     public bool IsOpen { get { return gameObject.activeSelf; } }
@@ -175,26 +177,29 @@ public class HatchPanel : MonoBehaviour
         UIFactory.FillParent(revealGroup);
         var p = revealGroup.transform;
 
+        // 稀有度徽章（颜色随稀有度变化）
         revealRarityText = UIFactory.CreateText(p, "Rarity", "",
-            new Vector2(820f, 60f), new Vector2(0f, 470f), 34, Color.white);
+            new Vector2(820f, 50f), new Vector2(0f, 540f), 34, Color.white);
 
+        // 物种名（大字号，稀有度色）
         revealNameText = UIFactory.CreateText(p, "Name", "",
-            new Vector2(820f, 130f), new Vector2(0f, 370f), 88, Color.white);
+            new Vector2(820f, 130f), new Vector2(0f, 440f), 88, Color.white);
 
-        UIFactory.CreateText(p, "BornLabel", "它破壳了",
-            new Vector2(820f, 50f), new Vector2(0f, 280f), 30, new Color(0.8f, 0.74f, 0.66f));
+        // 破壳第一句话 —— 整个面板最重要的一行，字号比描述大、用引号包着
+        revealFirstLineText = UIFactory.CreateText(p, "FirstLine", "",
+            new Vector2(780f, 160f), new Vector2(0f, 290f), 36, new Color(1f, 0.92f, 0.76f));
 
         revealDescText = UIFactory.CreateText(p, "Desc", "",
-            new Vector2(760f, 110f), new Vector2(0f, 190f), 34, new Color(0.92f, 0.88f, 0.82f));
+            new Vector2(760f, 110f), new Vector2(0f, 150f), 30, new Color(0.82f, 0.78f, 0.72f));
 
         UIFactory.CreateText(p, "WishHead", "你当时说的是：",
-            new Vector2(760f, 44f), new Vector2(0f, 60f), 26, new Color(0.62f, 0.58f, 0.54f));
+            new Vector2(760f, 40f), new Vector2(0f, 40f), 26, new Color(0.58f, 0.54f, 0.50f));
 
         revealWishText = UIFactory.CreateText(p, "WishEcho", "",
-            new Vector2(760f, 160f), new Vector2(0f, -30f), 30, new Color(0.86f, 0.80f, 0.70f));
+            new Vector2(760f, 120f), new Vector2(0f, -40f), 28, new Color(0.72f, 0.68f, 0.62f));
 
         UIFactory.CreateButton(p, "BtnDone", "带它回家",
-            new Vector2(620f, 130f), new Vector2(0f, -300f),
+            new Vector2(620f, 130f), new Vector2(0f, -320f),
             new Color(0.85f, 0.55f, 0.22f, 1f), Hide, 46, new Color(1f, 0.98f, 0.94f));
     }
 
@@ -372,6 +377,10 @@ public class HatchPanel : MonoBehaviour
     {
         if (result == null) result = PetSpecies.Default;
 
+        // 愿望：本次会话用 currentWish，重新打开面板时回落到存档里的 lastWish
+        string wish = currentWish;
+        if (string.IsNullOrEmpty(wish) && GameData.Instance != null) wish = GameData.Instance.lastWish;
+
         if (revealRarityText != null)
         {
             revealRarityText.text = "· " + PetSpecies.GetRarityName(result.rarity) + " · " + result.family + "系 ·";
@@ -382,14 +391,17 @@ public class HatchPanel : MonoBehaviour
             revealNameText.text = result.displayName;
             revealNameText.color = PetSpecies.GetRarityColor(result.rarity);
         }
-        if (revealDescText != null) revealDescText.text = result.desc;
 
-        if (revealWishText != null)
+        // 第一句话：只在第一次进揭晓时生成一次，本会话内不再变（避免来回打开时台词乱跳）
+        if (revealFirstLineText != null)
         {
-            string wish = currentWish;
-            if (string.IsNullOrEmpty(wish) && GameData.Instance != null) wish = GameData.Instance.lastWish;
-            revealWishText.text = string.IsNullOrEmpty(wish) ? "" : "「" + wish + "」";
+            if (string.IsNullOrEmpty(cachedFirstLine))
+                cachedFirstLine = PetVoice.FirstLine(result, wish);
+            revealFirstLineText.text = "「" + cachedFirstLine + "」";
         }
+
+        if (revealDescText != null) revealDescText.text = result.desc;
+        if (revealWishText != null) revealWishText.text = string.IsNullOrEmpty(wish) ? "" : "「" + wish + "」";
 
         SetPhase(Phase.Revealed);
     }
