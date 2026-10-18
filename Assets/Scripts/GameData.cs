@@ -39,6 +39,12 @@ public class GameData : MonoBehaviour
     // ---- 进化字段（阶段三任务11；17G 起只剩出生时间——照顾质量分体系已删）----
     public long birthTimeTicks = 0;  // 出生时间戳（首次启动在 Awake 初始化，DateTime.Now）
 
+    // ---- 孵化字段（2026-10-19 孵化系统）----
+    public string speciesId = "";    // 当前宠物物种 id（空 = 老存档 → 运行时回退到小鸡）
+    public int hatchCount = 0;       // 累计孵化次数
+    public int pityCount = 0;        // 连续未出「稀有及以上」的次数（保底计数）
+    public string lastWish = "";     // 玩家说的愿望原文（破壳第一句话的原料，也进回忆录）
+
     // ---- 签到字段（阶段三任务14）----
     public long lastSignInDateTicks = 0; // 上次签到日的本地日期（当天 0 点，DateTime.Today.Ticks；0=从未签到）
     public int signInStreak = 0;         // 当前连签天数（1~7 一周一轮；0=从未签到/旧档无此键）
@@ -335,6 +341,10 @@ public class GameData : MonoBehaviour
             lastYardDateTicks = lastYardDateTicks.ToString(),
             toyCountToday = toyCountToday,
             lastToyDateTicks = lastToyDateTicks.ToString(),
+            speciesId = speciesId ?? "",
+            hatchCount = hatchCount,
+            pityCount = pityCount,
+            lastWish = lastWish ?? "",
         };
     }
 
@@ -524,6 +534,10 @@ public class GameData : MonoBehaviour
         if (long.TryParse(dto.lastYardDateTicks, out var lyd)) lastYardDateTicks = lyd;
         toyCountToday = dto.toyCountToday;
         if (long.TryParse(dto.lastToyDateTicks, out var ltd)) lastToyDateTicks = ltd;
+        speciesId = dto.speciesId ?? "";
+        hatchCount = dto.hatchCount;
+        pityCount = dto.pityCount;
+        lastWish = dto.lastWish ?? "";
         mood = Mathf.Min(100f, mood); // 任务17G：心情封顶 100（手改 JSON 写超了也不越界）
     }
 
@@ -713,6 +727,47 @@ public class GameData : MonoBehaviour
         if (day <= 2) return "幼鸡";
         if (day <= 6) return "少年鸡";
         return "成年鸡";
+    }
+
+    // ---------------- 孵化（2026-10-19） ----------------
+
+    /// <summary>
+    /// 当前物种。speciesId 为空（老存档）或指向已删除的物种时，一律回退到默认物种，
+    /// 保证任何年代的老档都能正常进游戏，不会因为查不到 id 而空引用。
+    /// </summary>
+    public PetSpecies.Def CurrentSpecies
+    {
+        get
+        {
+            var def = PetSpecies.FindById(speciesId);
+            return def != null ? def : PetSpecies.Default;
+        }
+    }
+
+    /// <summary>
+    /// 执行一次孵化：按当前保底计数抽一个物种，写入物种 id / 累计次数 / 保底计数 / 愿望原文。
+    /// 立即存档 —— 孵化是最不该丢的事件，玩家孵完就杀进程也必须留下结果。
+    /// 注意：不动金币、不动四维。孵化不是付费行为，也不该影响宠物状态。
+    /// </summary>
+    public PetSpecies.Def HatchSpecies(string wish)
+    {
+        var result = PetSpecies.Roll(pityCount);
+
+        speciesId = result.id;
+        hatchCount += 1;
+        // 保底计数：出了「稀有及以上」就归零，否则继续累加
+        pityCount = (result.rarity >= PetSpecies.RarityRare) ? 0 : pityCount + 1;
+        lastWish = wish != null ? wish.Trim() : "";
+
+        AddMemory("从蛋里孵出了一只「" + result.displayName + "」（" + PetSpecies.GetRarityName(result.rarity) + "）");
+        Save();
+        return result;
+    }
+
+    /// <summary>当前宠物的显示名（UI 用，永远非空）</summary>
+    public string GetSpeciesName()
+    {
+        return CurrentSpecies.displayName;
     }
 
     // ---------------- 签到（阶段三任务14） ----------------

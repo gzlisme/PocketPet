@@ -81,4 +81,10 @@ public class SaveData
     // ---- 陪玩玩具（wb 分支）----
     public int toyCountToday = 0;                  // 今日已陪玩玩具次数
     public string lastToyDateTicks = "0";          // 上次陪玩日期（Today.Ticks）
+
+    // ---- 孵化系统（2026-10-19）----
+    public string speciesId = "";                  // 当前宠物物种 id（空 = 老存档，运行时回退到小鸡）
+    public int hatchCount = 0;                     // 累计孵化次数（图鉴/统计用）
+    public int pityCount = 0;                      // 连续未出「稀有及以上」的次数（保底计数，出稀有即归零）
+    public string lastWish = "";                   // 玩家对它说的愿望原文（破壳第一句话的原料）
 }
