@@ -751,17 +751,27 @@ public class GameData : MonoBehaviour
     /// </summary>
     public PetSpecies.Def HatchSpecies(string wish)
     {
-        var result = PetSpecies.Roll(pityCount);
+        return HatchSpeciesWith(PetSpecies.Roll(pityCount), wish);
+    }
 
-        speciesId = result.id;
+    /// <summary>
+    /// 用「指定的物种」落孵（抽牌用）：玩家从十张牌里挑中一张，那张就是结果。
+    /// 与 HatchSpecies 分开是因为抽牌界面必须先把 10 个候选一次性定下来再让玩家选 ——
+    /// 否则「抽牌」只是视觉表演，牌面内容和结果无关联，玩家迟早会发现。
+    /// </summary>
+    public PetSpecies.Def HatchSpeciesWith(PetSpecies.Def chosen, string wish)
+    {
+        if (chosen == null) chosen = PetSpecies.Default;
+
+        speciesId = chosen.id;
         hatchCount += 1;
         // 保底计数：出了「稀有及以上」就归零，否则继续累加
-        pityCount = (result.rarity >= PetSpecies.RarityRare) ? 0 : pityCount + 1;
+        pityCount = (chosen.rarity >= PetSpecies.RarityRare) ? 0 : pityCount + 1;
         lastWish = wish != null ? wish.Trim() : "";
 
-        AddMemory("从蛋里孵出了一只「" + result.displayName + "」（" + PetSpecies.GetRarityName(result.rarity) + "）");
+        AddMemory("从蛋里孵出了一只「" + chosen.displayName + "」（" + PetSpecies.GetRarityName(chosen.rarity) + "）");
         Save();
-        return result;
+        return chosen;
     }
 
     /// <summary>当前宠物的显示名（UI 用，永远非空）</summary>
