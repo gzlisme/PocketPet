@@ -1595,7 +1595,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: "\u666E\u901A\u6DCB\u6D74\uFF08\u82B1\u8D39 2000 \u91D1\u5E01\uFF0C\u6E05\u6D01
+  m_Text: "\u666E\u901A\u6DCB\u6D74\uFF08\u82B1\u8D39 20 \u91D1\u5E01\uFF0C\u6E05\u6D01
     +30\uFF09"
 --- !u!222 &322695882
 CanvasRenderer:
@@ -1853,7 +1853,7 @@ MonoBehaviour:
   health: 100
   mood: 100
   clean: 100
-  coins: 100000000
+  coins: 1000
   lastSaveTimeTicks: 0
   isDead: 0
   ownedItems: 
@@ -1955,7 +1955,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: "\u666E\u901A\u9972\u6599\uFF08\u82B1\u8D39 1000 \u91D1\u5E01\uFF0C\u9965\u997F
+  m_Text: "\u666E\u901A\u9972\u6599\uFF08\u82B1\u8D39 10 \u91D1\u5E01\uFF0C\u9965\u997F
     +15\uFF09"
 --- !u!222 &352628062
 CanvasRenderer:
@@ -5576,7 +5576,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: "\u8C6A\u534E\u96F6\u98DF\uFF08\u82B1\u8D39 50000 \u91D1\u5E01\uFF0C\u9965\u997F
+  m_Text: "\u8C6A\u534E\u96F6\u98DF\uFF08\u82B1\u8D39 60 \u91D1\u5E01\uFF0C\u9965\u997F
     +30\uFF0C\u5FC3\u60C5 +10\uFF09"
 --- !u!222 &1100603761
 CanvasRenderer:
@@ -6163,7 +6163,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: "\u5F53\u524D\u91D1\u5E01\uFF1A100000000"
+  m_Text: "\u5F53\u524D\u91D1\u5E01\uFF1A1000"
 --- !u!1 &1282397357
 GameObject:
   m_ObjectHideFlags: 0
@@ -10201,7 +10201,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: "\u6CE1\u6CE1\u6D74\uFF08\u82B1\u8D39 10000 \u91D1\u5E01\uFF0C\u6E05\u6D01
+  m_Text: "\u6CE1\u6CE1\u6D74\uFF08\u82B1\u8D39 120 \u91D1\u5E01\uFF0C\u6E05\u6D01
     +30\uFF0C\u5FC3\u60C5 +5\uFF09"
 --- !u!222 &1902333297
 CanvasRenderer:

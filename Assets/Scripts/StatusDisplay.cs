@@ -22,7 +22,7 @@ public class StatusDisplay : MonoBehaviour
         if (textHunger != null) textHunger.text = "食物：" + Mathf.FloorToInt(gd.hunger);
         if (textHealth != null) textHealth.text = "健康：" + Mathf.FloorToInt(gd.health);
         if (textMood != null) textMood.text = "心情：" + Mathf.FloorToInt(gd.mood);
-        if (textCoins != null) textCoins.text = "金币：" + gd.coins;
+        if (textCoins != null) textCoins.text = "金币：" + GameData.FormatCoins(gd.coins);
         if (textDay != null) textDay.text = "第 " + gd.GetCurrentDay() + " 天";
         if (cleanText != null) cleanText.text = "清洁：" + Mathf.FloorToInt(gd.clean); // 任务17D补丁：整数风格跟随现有 FloorToInt
     }

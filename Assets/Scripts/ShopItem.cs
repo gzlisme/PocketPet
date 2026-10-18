@@ -15,11 +15,11 @@ public class ShopItem
 
     public static readonly List<ShopItem> AllItems = new List<ShopItem>
     {
-        new ShopItem { id = "hat_red",       displayName = "红色帽子", price = 1000000L, slot = "hat",     color = new Color(1f, 0f, 0f) },              // #FF0000
-        new ShopItem { id = "scarf_blue",    displayName = "蓝色围巾", price = 2000000L, slot = "scarf",   color = new Color(0f, 0f, 1f) },              // #0000FF
-        new ShopItem { id = "glasses_black", displayName = "黑色墨镜", price = 3000000L, slot = "glasses", color = new Color(0f, 0f, 0f) },             // #000000
-        new ShopItem { id = "hat_gold",      displayName = "金色帽子", price = 5000000L, slot = "hat",     color = new Color(1f, 215f / 255f, 0f) },    // #FFD700
-        new ShopItem { id = "scarf_purple",  displayName = "紫色围巾", price = 8000000L, slot = "scarf",   color = new Color(128f / 255f, 0f, 128f / 255f) } // #800080
+        new ShopItem { id = "hat_red",       displayName = "红色帽子", price = 800L,     slot = "hat",     color = new Color(1f, 0f, 0f) },              // #FF0000
+        new ShopItem { id = "scarf_blue",    displayName = "蓝色围巾", price = 2000L,    slot = "scarf",   color = new Color(0f, 0f, 1f) },              // #0000FF
+        new ShopItem { id = "glasses_black", displayName = "黑色墨镜", price = 4000L,    slot = "glasses", color = new Color(0f, 0f, 0f) },             // #000000
+        new ShopItem { id = "hat_gold",      displayName = "金色帽子", price = 7000L,    slot = "hat",     color = new Color(1f, 215f / 255f, 0f) },    // #FFD700
+        new ShopItem { id = "scarf_purple",  displayName = "紫色围巾", price = 10000L,   slot = "scarf",   color = new Color(128f / 255f, 0f, 128f / 255f) } // #800080
     };
 
     public static ShopItem FindById(string itemId)

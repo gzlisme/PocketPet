@@ -21,7 +21,7 @@ public class GameData : MonoBehaviour
     public float health = 100f;          // 健康 0~100
     public float mood = 100f;            // 心情 0~100
     public float clean = 100f;           // 清洁 0~100（任务17D）
-    public long coins = 100000000L;      // 金币：一个亿
+    public long coins = 1000L;      // 金币：开局启动资金（经济重设单A）
     public long lastSaveTimeTicks;      // 上次退出时间戳（UTC Ticks）
     public bool isDead = false;          // 死亡标记（任务17E：health≤0 置位，重启不复活；领蛋重置清零）
 
@@ -377,13 +377,13 @@ public class GameData : MonoBehaviour
         return lastSignInDateTicks != DateTime.Today.Ticks;
     }
 
-    /// <summary>今天签到会得的金币（第 7 天连签 = 10万+100万，其余 = 10万），供 UI 显示，不改动任何状态</summary>
+    /// <summary>今天签到会得的金币（第 7 天连签 = 800，其余 = 150），供 UI 显示，不改动任何状态</summary>
     public int GetTodayReward()
     {
         long yesterday = DateTime.Today.AddDays(-1).Ticks;
         int streakToday = (lastSignInDateTicks == yesterday) ? signInStreak + 1 : 1; // 今天若签到将处的连签天数：昨天签过→+1，首次/断签→1
         if (streakToday > 7) streakToday = 1; // 一周一轮：第 8 天回到第 1 天
-        return streakToday >= 7 ? 100000 + 1000000 : 100000;
+        return streakToday >= 7 ? 800 : 150;
     }
 
     /// <summary>执行签到：连签判定（昨天签过→+1，否则→1；满 7 后新一轮回 1）、记录今天 0 点、金币入账、立即存档；返回本次奖励（当天已签返回 0，不重复发奖）</summary>
@@ -434,6 +434,28 @@ public class GameData : MonoBehaviour
         unlockedAchievements = (unlockedAchievements == "") ? id : unlockedAchievements + "," + id;
     }
 
+    // ---------------- 金币格式化（经济重设单A） ----------------
+
+    /// <summary>
+    /// 金币分段格式化（单A·健壮版）：&lt;10000 直显；≥1亿 用"亿+万"（余数落到万位）；
+    /// ≥10000 用"万"；其余直显。老档 1 亿 = "1亿"，1.5 亿 = "1亿5000万"。
+    /// </summary>
+    public static string FormatCoins(long amount)
+    {
+        if (amount < 10000L) return amount.ToString();
+        if (amount >= 100000000L)
+        {
+            long yi = amount / 100000000L;
+            long rest = amount % 100000000L;
+            if (rest == 0) return yi + "亿";
+            long wan = rest / 10000L;
+            if (wan == 0) return yi + "亿";  // 边界修正：1 亿零 5000 → "1亿"（避免"1亿0万"）
+            return yi + "亿" + wan + "万";   // 万以下零头丢弃（万以下无意义）
+        }
+        if (amount % 10000L == 0) return (amount / 10000L) + "万";
+        return (amount / 10000L) + "." + (amount % 10000L / 1000L) + "万";
+    }
+
     // ---------------- 成就定义与发放（阶段四任务15B） ----------------
 
     /// <summary>成就定义（任务15B）：id 唯一标识 / name 显示名 / target 达成所需次数 / reward 解锁时发放的金币</summary>
@@ -448,11 +470,11 @@ public class GameData : MonoBehaviour
     /// <summary>全部成就定义表（任务15B；17D补丁删 sleep_10，5 项）：喂食×2 / 洗澡 / 逗鸡 / 签到</summary>
     public static readonly AchievementDef[] AchievementDefs =
     {
-        new AchievementDef { id = "feed_10",  name = "新手饲养员", target = 10,  reward = 10000L },
-        new AchievementDef { id = "feed_100", name = "金牌饲养员", target = 100, reward = 100000L },
-        new AchievementDef { id = "bath_10",  name = "爱干净",     target = 10,  reward = 10000L },
-        new AchievementDef { id = "yard_10",  name = "游戏伙伴",   target = 10,  reward = 10000L },
-        new AchievementDef { id = "sign_7",   name = "全勤奖",     target = 7,   reward = 100000L },
+        new AchievementDef { id = "feed_10",  name = "新手饲养员", target = 10,  reward = 200L },
+        new AchievementDef { id = "feed_100", name = "金牌饲养员", target = 100, reward = 1500L },
+        new AchievementDef { id = "bath_10",  name = "爱干净",     target = 10,  reward = 200L },
+        new AchievementDef { id = "yard_10",  name = "游戏伙伴",   target = 10,  reward = 200L },
+        new AchievementDef { id = "sign_7",   name = "全勤奖",     target = 7,   reward = 800L },
     };
 
     /// <summary>成就当前进度（任务15B；任务15C 经老板改单由 private 转 public 供 UI 直调）：id → 对应计数字段；未知 id 返回 0</summary>
@@ -480,7 +502,7 @@ public class GameData : MonoBehaviour
             coins += def.reward;
             Save();
             // 任务15D：解锁时缓存提示消息供 UI 反馈文本显示（多个用"；"分隔；解锁逻辑本身不变）
-            string oneMessage = "成就达成：" + def.name + " +" + (def.reward / 10000L) + "万金币"; // 清理单-01：奖励数字万字化（整数万，不四舍五入）
+            string oneMessage = "成就达成：" + def.name + " +" + FormatCoins(def.reward) + " 金币"; // 单A：改走分段格式化；空格与签到飘字统一
             pendingAchievementMessage = (pendingAchievementMessage == "") ? oneMessage : pendingAchievementMessage + "；" + oneMessage;
         }
     }

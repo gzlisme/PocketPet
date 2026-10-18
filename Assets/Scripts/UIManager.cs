@@ -175,11 +175,11 @@ public class UIManager : MonoBehaviour
         if (feedPanel != null) feedPanel.SetActive(false);
     }
 
-    /// <summary>普通饲料：花费 1000 金币，饥饿 +15</summary>
-    public void FeedNormal() { TryFeed(1000L, 15f, 0f); }
+    /// <summary>普通饲料：花费 10 金币，饥饿 +15</summary>
+    public void FeedNormal() { TryFeed(10L, 15f, 0f); }
 
-    /// <summary>豪华零食：花费 50000 金币，饥饿 +30，心情 +10（任务17：+40→+30）</summary>
-    public void FeedPremium() { TryFeed(50000L, 30f, 10f); }
+    /// <summary>豪华零食：花费 60 金币，饥饿 +30，心情 +10（任务17：+40→+30）</summary>
+    public void FeedPremium() { TryFeed(60L, 30f, 10f); }
 
     /// <summary>喂食核心：金币不足→提示不扣钱；足够→扣钱、加食物（不封顶）与心情（钳 100）、立即存档、提示成功</summary>
     private void TryFeed(long cost, float hungerGain, float moodGain)
@@ -193,19 +193,21 @@ public class UIManager : MonoBehaviour
             return; // 不扣钱
         }
         gd.coins -= cost;
+        float moodBefore = gd.mood; // 2026-10-18：记加值前心情，用于飘"实际到账量"
         gd.hunger = Mathf.Max(0f, gd.hunger + hungerGain);
         if (moodGain > 0f) gd.mood = Mathf.Clamp(gd.mood + moodGain, 0f, 100f); // 任务17G：心情封顶 100
         gd.Save(); // 立即存档
         gd.AddFeedCount(); // 任务15B：互动成功计数（成就系统）
         if (feedFeedbackText != null)
         {
-            feedFeedbackText.text = "喂食成功" + GetAchievementProgressSuffix("feed"); // 任务15D：反馈带成就进度
+            feedFeedbackText.text = "喂食成功"; // 2026-10-18：去掉成就进度后缀（老板反馈：每次都挂 49/100 太吵）
             string msg = gd.ConsumeAchievementMessage(); // 任务15D：本次解锁的成就提示追加（取走即清空）
             if (!string.IsNullOrEmpty(msg)) feedFeedbackText.text += " · " + msg;
         }
         // 任务15E：互动成功飘字——加值向上飘；cost>0 再飘一条扣金币向下（金币不足已在上方 return，到不了这里）
         string gainText = "+" + hungerGain + " 食物";
-        if (moodGain > 0f) gainText += " +" + moodGain + " 心情";
+        float moodActual = gd.mood - moodBefore; // 2026-10-18：心情满时不再虚报（原来照飘 +10 实际 +0）
+        if (moodGain > 0f && moodActual >= 0.5f) gainText += " +" + Mathf.RoundToInt(moodActual) + " 心情";
         SpawnFloatingText(gainText, FloatGainColor, 0f, 200f, 120f, 1.5f);
         if (cost > 0L) SpawnFloatingText("-" + cost + " 金币", FloatCostColor, 0f, 100f, -120f, 1.5f);
     }
@@ -236,11 +238,11 @@ public class UIManager : MonoBehaviour
         if (bathPanel != null) bathPanel.SetActive(false);
     }
 
-    /// <summary>普通淋浴：花费 2000 金币（任务17D：加清洁度，健康不再直接加）</summary>
-    public void BathNormal() { TryBath(2000L, 20f, 0f); }
+    /// <summary>普通淋浴：花费 20 金币（任务17D：加清洁度，健康不再直接加）</summary>
+    public void BathNormal() { TryBath(20L, 20f, 0f); }
 
-    /// <summary>泡泡浴：花费 10000 金币，心情 +5（任务17D：加清洁度，健康不再直接加）</summary>
-    public void BathPremium() { TryBath(10000L, 50f, 5f); }
+    /// <summary>泡泡浴：花费 120 金币，心情 +5（任务17D：加清洁度，健康不再直接加）</summary>
+    public void BathPremium() { TryBath(120L, 50f, 5f); }
 
     /// <summary>洗澡核心（任务17D）：金币不足→提示不扣钱；足够→扣钱、加清洁度（递减：≤50→+30、≤80→+15、其余 +5，钳 100）、加心情、立即存档</summary>
     private void TryBath(long cost, float healthGain, float moodGain)
@@ -253,22 +255,33 @@ public class UIManager : MonoBehaviour
             if (bathFeedbackText != null) bathFeedbackText.text = "金币不足";
             return; // 不扣钱
         }
+        // 2026-10-18：清洁已满（或可加量不足 1 点）→ 不扣钱（花金币买 +0 太伤感情），只提示。
+        // 老板反馈：清洁满了还照扣 120。递减档提前算，用"真实可加量"判定，顺带避免飘 +0。
+        float cleanGain = gd.clean <= 50f ? 30f : (gd.clean <= 80f ? 15f : 5f);
+        float cleanActual = Mathf.Min(100f, gd.clean + cleanGain) - gd.clean;
+        if (cleanActual < 1f)
+        {
+            if (bathFeedbackText != null) bathFeedbackText.text = "已经很干净啦";
+            SpawnFloatingText("已经很干净啦", Color.white, 0f, 200f, 120f, 1.5f);
+            return;
+        }
         gd.coins -= cost;
         // 洗澡加清洁度，递减：越接近满加越少（任务17D；healthGain 参数仅保留签名兼容，健康不再直接加）
-        float cleanGain = gd.clean <= 50f ? 30f : (gd.clean <= 80f ? 15f : 5f);
+        float moodBefore = gd.mood;
         gd.clean = Mathf.Min(100f, gd.clean + cleanGain);
         if (moodGain > 0f) gd.mood = Mathf.Clamp(gd.mood + moodGain, 0f, 100f); // 任务17G：心情封顶 100
         gd.Save(); // 立即存档
         gd.AddBathCount(); // 任务15B：互动成功计数（成就系统）
         if (bathFeedbackText != null)
         {
-            bathFeedbackText.text = "洗澡成功" + GetAchievementProgressSuffix("bath"); // 任务15D：反馈带成就进度
+            bathFeedbackText.text = "洗澡成功"; // 2026-10-18：去掉成就进度后缀
             string msg = gd.ConsumeAchievementMessage(); // 任务15D：本次解锁的成就提示追加（取走即清空）
             if (!string.IsNullOrEmpty(msg)) bathFeedbackText.text += " · " + msg;
         }
-        // 任务15E：互动成功飘字——加值向上飘；cost>0 再飘一条扣金币向下（金币不足已在上方 return，到不了这里）
-        string gainText = "+" + cleanGain + " 清洁"; // 任务17D：洗澡飘字改清洁
-        if (moodGain > 0f) gainText += " +" + moodGain + " 心情";
+        // 2026-10-18：飘字改"实际到账量"（原来飘理论值，清洁 98 时实际 +2 却写 +5）；cleanActual 在上方已算好
+        float moodActual = gd.mood - moodBefore;
+        string gainText = "+" + Mathf.RoundToInt(cleanActual) + " 清洁";
+        if (moodGain > 0f && moodActual >= 0.5f) gainText += " +" + Mathf.RoundToInt(moodActual) + " 心情";
         SpawnFloatingText(gainText, FloatGainColor, 0f, 200f, 120f, 1.5f);
         if (cost > 0L) SpawnFloatingText("-" + cost + " 金币", FloatCostColor, 0f, 100f, -120f, 1.5f);
     }
@@ -294,8 +307,16 @@ public class UIManager : MonoBehaviour
     /// <summary>陪它散步：免费，心情 +5</summary>
     public void PlayFree() { TryYard(0L, 5f); }
 
-    /// <summary>豪华玩具：花费 20000 金币，心情 +30</summary>
-    public void PlayPremium() { TryYard(20000L, 30f); }
+    /// <summary>豪华玩具已下线（老板决定：玩具改由商店购买）。
+    /// 保留方法签名与场景按钮绑定，不改场景；当前不扣钱、不加心情、不计成就，仅提示去商店。
+    /// B 单（玩具子系统）可在此处接回真实逻辑。</summary>
+    public void PlayPremium()
+    {
+        var gd = GameData.Instance;
+        if (gd == null || gd.isDead) return; // 死亡期间禁止互动
+        if (yardFeedbackText != null) yardFeedbackText.text = "玩具去商店买啦";
+        SpawnFloatingText("玩具去商店买啦", Color.white, 0f, 200f, 120f, 1.5f);
+    }
 
     /// <summary>逗鸡核心：收费项金币不足→提示不扣钱；免费直接走成功；mood 钳 100、立即存档</summary>
     private void TryYard(long cost, float moodGain)
@@ -314,12 +335,12 @@ public class UIManager : MonoBehaviour
         gd.AddYardCount(); // 任务15B：互动成功计数（成就系统）
         if (yardFeedbackText != null)
         {
-            yardFeedbackText.text = "逗鸡成功，小鸡很开心！" + GetAchievementProgressSuffix("yard"); // 任务15D：反馈带成就进度
+            yardFeedbackText.text = "逗鸡成功，小鸡很开心！"; // 2026-10-18：去掉成就进度后缀（21/10 越界显示太闹心）
             string msg = gd.ConsumeAchievementMessage(); // 任务15D：本次解锁的成就提示追加（取走即清空）
             if (!string.IsNullOrEmpty(msg)) yardFeedbackText.text += " · " + msg;
         }
         // 任务15E：互动成功飘字——加值向上飘；免费项（cost==0）只飘加值，不飘扣金币
-        SpawnFloatingText("+" + moodGain + " 心情", FloatGainColor, 0f, 200f, 120f, 1.5f);
+        SpawnFloatingText(WalkMoodText(gd.mood), FloatGainColor, 0f, 200f, 120f, 1.5f);
         if (cost > 0L) SpawnFloatingText("-" + cost + " 金币", FloatCostColor, 0f, 100f, -120f, 1.5f);
     }
 
@@ -429,7 +450,7 @@ public class UIManager : MonoBehaviour
     {
         var gd = GameData.Instance;
         if (shopCoinsText != null && gd != null)
-            shopCoinsText.text = "当前金币：" + gd.coins;
+            shopCoinsText.text = "当前金币：" + GameData.FormatCoins(gd.coins);
     }
 
     /// <summary>任务17H：刷新商店按钮文字三态（未购买/已拥有未穿/使用中）</summary>
@@ -448,10 +469,10 @@ public class UIManager : MonoBehaviour
 
             bool owned = IsOwned(gd, item.id);
             string equippedId = GetEquipped(gd, item.slot);
-            string priceWan = (item.price / 10000L) + "万";
+            string priceText = GameData.FormatCoins(item.price);
 
             if (!owned)
-                txt.text = item.displayName + "（" + priceWan + "）";
+                txt.text = item.displayName + "（" + priceText + "）";
             else if (equippedId == item.id)
                 txt.text = item.displayName + "（使用中 · 点击卸下）";
             else
@@ -611,9 +632,33 @@ public class UIManager : MonoBehaviour
         var gd = GameData.Instance;
         if (gd == null || gd.isDead) return;
         if (gd.PatChick())
-            SpawnFloatingText("+5 心情", FloatGainColor, 0f, 200f, 120f, 1.5f);
+            SpawnFloatingText(PatMoodText(gd.mood), FloatGainColor, 0f, 200f, 120f, 1.5f);
         else
-            SpawnFloatingText("今天摸够啦", Color.white, 0f, 200f, 120f, 1.5f);
+            SpawnFloatingText("宝宝已经很开心", Color.white, 0f, 200f, 120f, 1.5f); // 2026-10-18：3 次限的是"加心情"不是"摸"，不能说"摸够啦"
+    }
+
+    /// <summary>抚摸成功文案（按加完后的心情值分档；飘字 Text 宽 400 / 字号 48，文案必须 ≤8 汉字，防截断）</summary>
+    private static string PatMoodText(float m)
+    {
+        if (m >= 96f) return "宝宝爱你";
+        if (m >= 90f) return "宝宝稀罕你";
+        if (m >= 80f) return "宝宝喜欢你";
+        if (m >= 65f) return "好舒服呀";
+        if (m >= 45f) return "再摸摸嘛";
+        if (m >= 25f) return "宝宝闷闷的";
+        return "宝宝不开心";
+    }
+
+    /// <summary>散步成功文案（按加完后的心情值分档；与抚摸区分语气；文案必须 ≤8 汉字）</summary>
+    private static string WalkMoodText(float m)
+    {
+        if (m >= 96f) return "飞起来啦";
+        if (m >= 90f) return "撒欢儿跑两圈";
+        if (m >= 80f) return "追着影子跑";
+        if (m >= 65f) return "蹦蹦跳跳";
+        if (m >= 45f) return "歪头看看你";
+        if (m >= 25f) return "提不起劲";
+        return "蹲在角落";
     }
 
     // ---------------- 签到（阶段三任务14） ----------------
@@ -663,25 +708,6 @@ public class UIManager : MonoBehaviour
                     + (gd.IsAchievementUnlocked(def.id) ? "已达成" : "未完成");
         }
         achievementListText.text = text;
-    }
-
-    // ---------------- 成就反馈（阶段四任务15D） ----------------
-
-    /// <summary>互动成功反馈的成就进度后缀（任务15D；17D补丁删 sleep 分支）：feed 按当前进度显示下一目标，bath/yard 固定 /10；未知类型返回空串</summary>
-    private string GetAchievementProgressSuffix(string type)
-    {
-        var gd = GameData.Instance;
-        if (gd == null) return "";
-        switch (type)
-        {
-            case "feed":
-                if (gd.feedCount < 10) return "（新手饲养员 " + gd.feedCount + "/10）";
-                if (gd.feedCount < 100) return "（金牌饲养员 " + gd.feedCount + "/100）";
-                return "（喂食成就已全达成）";
-            case "bath": return "（爱干净 " + gd.bathCount + "/10）";
-            case "yard": return "（游戏伙伴 " + gd.yardCount + "/10）";
-            default: return "";
-        }
     }
 
     // ---------------- 互动飘字反馈（阶段四任务15E） ----------------
@@ -782,7 +808,7 @@ public class UIManager : MonoBehaviour
         diaryInputField.text = "";
         RefreshDiaryPanel();
         if (reward > 0)
-            SpawnFloatingText("+" + (reward / 10000L) + "万 金币", new Color(1f, 0.85f, 0.3f), 0f, 200f, 120f, 1.5f); // 清理单-01：奖励数字万字化（整数万，不四舍五入）
+            SpawnFloatingText("+" + GameData.FormatCoins(reward) + " 金币", new Color(1f, 0.85f, 0.3f), 0f, 200f, 120f, 1.5f); // 单A：改走分段格式化
         else if (reward == 0)
             SpawnFloatingText("已记录", Color.white, 0f, 200f, 120f, 1.5f);
     }
