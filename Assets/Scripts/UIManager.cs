@@ -77,6 +77,14 @@ public class UIManager : MonoBehaviour
     private void Start()
     {
         RefreshSignInButton(); // 任务14：进场刷新签到按钮（Start 时全部 Awake 已完成，GameData 必已读档——工单拍板 B 方案）
+
+        // 老板拍板：豪华玩具下线（玩具改由商店购买）。这里直接隐藏场景对象而非删场景结构——
+        // 改场景父子关系风险高，隐藏效果一样且随时可恢复。Transform.Find 能找到 inactive 子对象，故重复调用也安全。
+        if (yardPanel != null)
+        {
+            var premium = yardPanel.transform.Find("Btn_PlayPremium");
+            if (premium != null) premium.gameObject.SetActive(false);
+        }
     }
 
     private void Update()
@@ -261,8 +269,8 @@ public class UIManager : MonoBehaviour
         float cleanActual = Mathf.Min(100f, gd.clean + cleanGain) - gd.clean;
         if (cleanActual < 1f)
         {
-            if (bathFeedbackText != null) bathFeedbackText.text = "已经很干净啦";
-            SpawnFloatingText("已经很干净啦", Color.white, 0f, 200f, 120f, 1.5f);
+            if (bathFeedbackText != null) bathFeedbackText.text = "它已经干干净净了";
+            SpawnFloatingText("它香喷喷的", Color.white, 0f, 200f, 120f, 1.5f);
             return;
         }
         gd.coins -= cost;
@@ -318,7 +326,7 @@ public class UIManager : MonoBehaviour
         SpawnFloatingText("玩具去商店买啦", Color.white, 0f, 200f, 120f, 1.5f);
     }
 
-    /// <summary>逗鸡核心：收费项金币不足→提示不扣钱；免费直接走成功；mood 钳 100、立即存档</summary>
+    /// <summary>逗鸡核心：收费项金币不足→提示不扣钱；A+ 起加两道闸（心情软天花板、每日次数）</summary>
     private void TryYard(long cost, float moodGain)
     {
         var gd = GameData.Instance;
@@ -329,6 +337,24 @@ public class UIManager : MonoBehaviour
             if (yardFeedbackText != null) yardFeedbackText.text = "金币不足";
             return; // 不扣钱
         }
+
+        // A+ 上限①：心情软天花板。必须先判这个、再扣次数 —— 心情已满时点一下等于白烧一次日额度。
+        // 这里不记成就、不存档：什么都没发生，不该留下痕迹。
+        if (gd.mood >= GameData.MoodSoftCap)
+        {
+            if (yardFeedbackText != null) yardFeedbackText.text = "它现在开心得不得了";
+            SpawnFloatingText("小鸡乐开花", Color.white, 0f, 200f, 120f, 1.5f);
+            return;
+        }
+
+        // A+ 上限②：每日散步次数（跨天自动清零）
+        if (!gd.TryConsumeYardToday())
+        {
+            if (yardFeedbackText != null) yardFeedbackText.text = "今天陪它玩够了，明天再来";
+            SpawnFloatingText("小鸡跑累啦", Color.white, 0f, 200f, 120f, 1.5f);
+            return;
+        }
+
         gd.coins -= cost; // 免费项为 0，等效不扣
         gd.mood = Mathf.Clamp(gd.mood + moodGain, 0f, 100f); // 任务17G：心情封顶 100
         gd.Save(); // 立即存档
@@ -634,7 +660,7 @@ public class UIManager : MonoBehaviour
         if (gd.PatChick())
             SpawnFloatingText(PatMoodText(gd.mood), FloatGainColor, 0f, 200f, 120f, 1.5f);
         else
-            SpawnFloatingText("宝宝已经很开心", Color.white, 0f, 200f, 120f, 1.5f); // 2026-10-18：3 次限的是"加心情"不是"摸"，不能说"摸够啦"
+            SpawnFloatingText("它舒服得眯起眼", Color.white, 0f, 200f, 120f, 1.5f); // 3 次限的是"加心情"不是"摸"，文案只描述状态、不提次数
     }
 
     /// <summary>抚摸成功文案（按加完后的心情值分档；飘字 Text 宽 400 / 字号 48，文案必须 ≤8 汉字，防截断）</summary>

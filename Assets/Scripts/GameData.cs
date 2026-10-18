@@ -1,8 +1,12 @@
 using System;
+using System.IO;
 using UnityEngine;
 
 /// <summary>
-/// 游戏数据底座（阶段二任务5）：单例 + PlayerPrefs 存档 + 在线/离线衰减。
+/// 游戏数据底座（阶段二任务5）：单例 + JSON 存档 + 在线/离线衰减。
+/// 存档层（wb 分支重构）：落盘于 Application.persistentDataPath/pocketpet_save.json，人类可读可手改；
+/// 首次运行自动把旧版 PlayerPrefs 存档迁到 JSON（旧键保留不删，作回滚兜底）。
+/// 写盘为"临时文件 → 备份 .bak → 原子替换"，读档失败时依次回退 .bak，绝不悄悄读回旧 PlayerPrefs。
 /// 本单只含数据与存档，不含任何房间交互逻辑（喂食/洗澡/睡觉等属后续工单）。
 /// 衰减规则（任务17D/17F，速率基准=清醒日 14 小时=50400 秒）：hunger 自然 -20/清醒日 + 晨扣 30/天（合计 50/天，17F 平衡设计）；
 /// clean -30/清醒日；mood 分 5 档（≥75/≥55/≥40/≥30/其余 → 25/20/15/10/5 每清醒日）× 疲劳倍率（连续醒 >16h×1.5、>24h×2；睡着清零）；
@@ -58,6 +62,13 @@ public class GameData : MonoBehaviour
     private int patCountToday = 0;      // 今日已抚摸次数（跨天由 PatChick 自动清零）
     private long lastPatDateTicks = 0;  // 上次抚摸日期（Today.Ticks）
 
+    // ---- 散步日限（A+ 上限机制，存档）----
+    private int yardCountToday = 0;      // 今日已散步次数（跨天由 TryConsumeYardToday 自动清零）
+    private long lastYardDateTicks = 0;  // 上次散步日期（Today.Ticks）
+
+    // ---- 存档元数据（wb 分支）----
+    private bool economyReset = false;   // 经济重设是否已执行（一次性标记，见 MigrateDto）
+
     // ---- 衰减速率与作息（任务17D/17F，每秒 = 每清醒日/50400；清醒日=14 小时=白天 6:00–20:00）----
     private const float HungerDecayPerSec = 20f / 50400f; // 任务17F：50→20（一天自然 20 + 晨扣 30 = 50，保原平衡）
     private const float CleanDecayPerSec = 30f / 50400f;
@@ -72,13 +83,24 @@ public class GameData : MonoBehaviour
     private const int NightAwakeMinutes = 5;      // 任务17F：夜间互动唤醒分钟数（每次重置，不叠加）
     private const int PatDailyLimit = 3;          // 任务17F-补丁：每天抚摸上限
 
+    // ---- A+ 上限机制（wb 分支第 2 步）----
+    /// <summary>
+    /// 心情软天花板：mood ≥ 此值时，一切"加心情"效果归零（食物、清洁照常，不受影响）。
+    /// 存在理由：陪散步是免费且原先无限次的，能一路把心情点到 100，心情彻底失去稀缺性。
+    /// 70 = 从低位靠散步/抚摸一天内能补到的上限，再往上必须靠"花金币的零食/泡泡浴"或等第二天。
+    /// </summary>
+    public const float MoodSoftCap = 70f;
+
+    /// <summary>陪散步每日上限（次数，不是金币）：免费项必须有日限，否则金币再多也不影响它刷满心情</summary>
+    public const int YardDailyLimit = 5;
+
     // ---- 疲劳阈值与倍率（任务17D，连续在线时长）----
     private const double FatigueThreshold1Hours = 16.0;
     private const double FatigueThreshold2Hours = 24.0;
     private const float FatigueMult1 = 1.5f;
     private const float FatigueMult2 = 2f;
 
-    // ---- PlayerPrefs 键 ----
+    // ---- 旧版 PlayerPrefs 键（wb 存档层重构后仅作"一次性迁移源"，新档全部写入 JSON）----
     private const string KeyHunger = "pp_hunger";
     private const string KeyHealth = "pp_health";
     private const string KeyMood = "pp_mood";
@@ -104,6 +126,19 @@ public class GameData : MonoBehaviour
     private const string KeyPatCountToday = "pp_patCountToday";             // 任务17F-补丁
     private const string KeyLastPatDate = "pp_lastPatDateTicks";            // 任务17F-补丁
 
+    // ---- JSON 存档（wb 分支：存档层重构）----
+    /// <summary>存档结构版本号，写入 SaveData.version；读档时低于此值的档会走 MigrateDto 就地升级</summary>
+    private const int SaveVersion = 2;
+
+    /// <summary>
+    /// 存档文件绝对路径。编辑器 / PC 下为 %USERPROFILE%\AppData\LocalLow\&lt;公司名&gt;\&lt;产品名&gt;\pocketpet_save.json；
+    /// 微信小游戏下由引擎映射到 wx.env.USER_DATA_PATH。可直接用文本编辑器查看、手改数值。
+    /// </summary>
+    public static string SaveFilePath
+    {
+        get { return Path.Combine(Application.persistentDataPath, "pocketpet_save.json"); }
+    }
+
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -112,7 +147,7 @@ public class GameData : MonoBehaviour
             return;
         }
         Instance = this;
-        Load();                 // 先读档
+        Load();                 // 先读档（内部：JSON → .bak → 旧 PlayerPrefs 迁移 → 新档）
         awakeSinceTicks = DateTime.UtcNow.Ticks; // 任务17D：连续在线起点（疲劳计时，不存档）
         if (lastMorningDropDateTicks == 0)
             lastMorningDropDateTicks = DateTime.Today.Ticks; // 任务17F：首次启动当天不扣，次日 6 点起扣
@@ -213,65 +248,271 @@ public class GameData : MonoBehaviour
         if (!isDead && health <= 0f) { isDead = true; Save(); }
     }
 
-    /// <summary>存档：全部字段写入 PlayerPrefs，并记录存档时刻</summary>
+    // ================= 存档层（wb 分支重构：PlayerPrefs → persistentDataPath JSON） =================
+
+    /// <summary>
+    /// 存档：刷新存档时刻（= "我活到这一刻了"，离线衰减的起点）→ 组装 SaveData → 原子写 JSON（顺带 .bak 备份）。
+    /// 写盘异常只记日志不抛：存档失败不该把游戏搞崩，下一轮 Save 自会重试。
+    /// </summary>
     public void Save()
     {
-        PlayerPrefs.SetFloat(KeyHunger, hunger);
-        PlayerPrefs.SetFloat(KeyHealth, health);
-        PlayerPrefs.SetFloat(KeyMood, mood);
-        PlayerPrefs.SetFloat(KeyClean, clean);                  // 任务17D
-        PlayerPrefs.SetString(KeyCoins, coins.ToString());
-        lastSaveTimeTicks = DateTime.UtcNow.Ticks;
-        PlayerPrefs.SetString(KeyTicks, lastSaveTimeTicks.ToString());
-        PlayerPrefs.SetString(KeyOwned, ownedItems);
-        PlayerPrefs.SetString(KeyEquippedHat, equippedHat);
-        PlayerPrefs.SetString(KeyEquippedScarf, equippedScarf);
-        PlayerPrefs.SetString(KeyEquippedGlasses, equippedGlasses);
-        PlayerPrefs.SetString(KeyBirthTicks, birthTimeTicks.ToString());
-        PlayerPrefs.SetString(KeyLastSignInDate, lastSignInDateTicks.ToString()); // 任务14：long 沿用字符串存档风格
-        PlayerPrefs.SetInt(KeySignInStreak, signInStreak);
-        PlayerPrefs.SetInt(KeyFeedCount, feedCount);               // 任务15A
-        PlayerPrefs.SetInt(KeyBathCount, bathCount);
-        PlayerPrefs.SetInt(KeyYardCount, yardCount);
-        PlayerPrefs.SetInt(KeySleepCount, sleepCount);
-        PlayerPrefs.SetString(KeyUnlockedAchievements, unlockedAchievements);
-        PlayerPrefs.SetString(KeyDiaryEntries, diaryEntries);          // 任务16A：碎碎念存档
-        PlayerPrefs.SetInt(KeyIsDead, isDead ? 1 : 0);                  // 任务17E：死亡标记
-        PlayerPrefs.SetString(KeyNightAwakeUntil, nightAwakeUntilTicks.ToString()); // 任务17F：夜间醒窗截止
-        PlayerPrefs.SetString(KeyLastMorningDrop, lastMorningDropDateTicks.ToString()); // 任务17F：晨扣日期
-        PlayerPrefs.SetInt(KeyPatCountToday, patCountToday);               // 任务17F-补丁：今日抚摸次数
-        PlayerPrefs.SetString(KeyLastPatDate, lastPatDateTicks.ToString()); // 任务17F-补丁：抚摸日期
-        PlayerPrefs.Save();
+        lastSaveTimeTicks = DateTime.UtcNow.Ticks; // 先刷新存档时刻，再组装（顺序与重构前一致）
+        WriteSaveQuiet();
     }
 
-    /// <summary>读档：无存档时保持字段初始值（旧存档缺商店键时保持空串，向后兼容）</summary>
+    /// <summary>
+    /// 原样落盘：不刷新 lastSaveTimeTicks，只把内存现状写出去。
+    /// 专供"读档后回写"场景（旧档迁移、.bak 恢复）—— 那些场景下 lastSaveTimeTicks 必须保留存档里的旧值，
+    /// 否则 ApplyOfflineDecay() 会算出"离线 0 秒"，离线衰减全部丢失。注意：别拿它替普通存档。
+    /// </summary>
+    private void WriteSaveQuiet()
+    {
+        try
+        {
+            WriteSaveFile(BuildDto());
+        }
+        catch (Exception e)
+        {
+            Debug.LogError("[存档] 写入失败：" + e.Message + "  路径：" + SaveFilePath);
+        }
+    }
+
+    /// <summary>把当前内存状态组装为存档 DTO（long 一律转 string，原因见 SaveData 类注释）</summary>
+    private SaveData BuildDto()
+    {
+        return new SaveData
+        {
+            version = SaveVersion,
+            economyReset = economyReset,
+            hunger = hunger,
+            health = health,
+            mood = mood,
+            clean = clean,
+            coins = coins.ToString(),
+            lastSaveTimeTicks = lastSaveTimeTicks.ToString(),
+            ownedItems = ownedItems ?? "",
+            equippedHat = equippedHat ?? "",
+            equippedScarf = equippedScarf ?? "",
+            equippedGlasses = equippedGlasses ?? "",
+            birthTimeTicks = birthTimeTicks.ToString(),
+            lastSignInDateTicks = lastSignInDateTicks.ToString(),
+            signInStreak = signInStreak,
+            feedCount = feedCount,
+            bathCount = bathCount,
+            yardCount = yardCount,
+            sleepCount = sleepCount,
+            unlockedAchievements = unlockedAchievements ?? "",
+            diaryEntries = diaryEntries ?? "",
+            isDead = isDead,
+            nightAwakeUntilTicks = nightAwakeUntilTicks.ToString(),
+            lastMorningDropDateTicks = lastMorningDropDateTicks.ToString(),
+            patCountToday = patCountToday,
+            lastPatDateTicks = lastPatDateTicks.ToString(),
+            yardCountToday = yardCountToday,
+            lastYardDateTicks = lastYardDateTicks.ToString(),
+        };
+    }
+
+    /// <summary>
+    /// 原子写盘：先写 .tmp → 现有档备份成 .bak → rename 就位。
+    /// 只用 WriteAllText / Copy / Delete / Move 四个最基础的 IO API，跨平台（含微信小游戏）兼容性最稳；
+    /// 不用 File.Replace，那玩意在部分 Mono / 移动端封装下行为不一致。
+    /// </summary>
+    private static void WriteSaveFile(SaveData dto)
+    {
+        string path = SaveFilePath;
+        string tmp = path + ".tmp";
+        string bak = path + ".bak";
+
+        File.WriteAllText(tmp, JsonUtility.ToJson(dto, true)); // true = 缩进美化，方便人肉查看与手改
+        if (File.Exists(path))
+        {
+            File.Copy(path, bak, true); // 上一版快照，读档失败时回退用
+            File.Delete(path);
+        }
+        File.Move(tmp, path);
+    }
+
+    /// <summary>
+    /// 读档总入口，四级回退：JSON 主档 → .bak 备份（读成功立刻回写主档）→ 旧版 PlayerPrefs 一次性迁移 → 全新档。
+    /// 关键安全点：只要 JSON 主档曾经存在，就绝不再悄悄回读 PlayerPrefs —— 那些键早停止更新，
+    /// 读回来 = 数据倒退，比报错更坑。宁可停在默认值并大声报错，让人看到 .bak 在哪。
+    /// </summary>
     public void Load()
     {
+        string path = SaveFilePath;
+
+        if (File.Exists(path))
+        {
+            if (TryLoadFromJson(path)) { Debug.Log("[存档] 已读取：" + path); return; }
+
+            string bak = path + ".bak";
+            if (File.Exists(bak) && TryLoadFromJson(bak))
+            {
+                Debug.LogWarning("[存档] 主档不可读，已从备份恢复：" + bak);
+                WriteSaveQuiet(); // 立刻回写主档（保留备份里的到期时刻，否则离线衰减归零）
+                return;
+            }
+
+            Debug.LogError("[存档] 主档与备份均不可读，停在默认值。请检查：" + path);
+            return;
+        }
+
+        if (TryMigrateFromPlayerPrefs())
+        {
+            WriteSaveQuiet(); // 迁移结果落盘（保留旧档到期时刻，供 Awake 里的 ApplyOfflineDecay 使用）
+            Debug.Log("[存档] 旧版 PlayerPrefs 存档已迁移到 JSON：" + path);
+            return;
+        }
+
+        Debug.Log("[存档] 无历史存档，按新档启动：" + path);
+    }
+
+    /// <summary>
+    /// 存档结构版本迁移 + 一次性数据修正：就地升级 DTO，返回 true 表示改动了内容（调用方应立刻回写主档）。
+    /// 未提及的字段一律原样保留。
+    /// </summary>
+    private bool MigrateDto(SaveData dto)
+    {
+        bool changed = false;
+
+        // 经济重设（一次性，用标记而非版本号判定）。
+        // 旧档是从 PlayerPrefs 忠实搬过来的，把开发期测试数据一起带了进来：金币 1 亿级、食物喂到 1400+，
+        // 导致"经济重设单A"每次测试都白做。这里一次性收敛到正规开局值，打过标记后永不再动。
+        if (!dto.economyReset)
+        {
+            if (long.TryParse(dto.coins, out var c) && c > 100000L)
+                dto.coins = "1000";        // 超 10 万 = 测试遗留，收敛到开局资金
+            if (dto.hunger > 100f) dto.hunger = 100f;   // 食物本可超量，但 1400 属测试残留
+            if (dto.clean > 100f) dto.clean = 100f;
+            if (dto.mood > 100f) dto.mood = 100f;
+            if (dto.health > 100f) dto.health = 100f;
+            dto.economyReset = true;
+            changed = true;
+        }
+
+        // 版本号推进，供以后真正的结构迁移使用
+        if (dto.version < SaveVersion) { dto.version = SaveVersion; changed = true; }
+
+        return changed;
+    }
+
+    /// <summary>读单一 JSON 文件并应用到内存；IO / 解析异常返回 false，由调用方决定往哪级回退</summary>
+    private bool TryLoadFromJson(string path)
+    {
+        try
+        {
+            string json = File.ReadAllText(path);
+            if (string.IsNullOrEmpty(json)) return false;
+            var dto = new SaveData();                    // 字段初始化器即"缺字段时的默认值"
+            JsonUtility.FromJsonOverwrite(json, dto);    // 用 Overwrite 而非 FromJson：保留缺字段默认值
+            bool upgraded = MigrateDto(dto);             // 先升级版本，再应用到内存
+            ApplyFromDto(dto);
+            if (upgraded) WriteSaveQuiet();              // 迁移结果立刻落盘，避免每次启动重算
+            return true;
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning("[存档] 读取失败 " + path + " → " + e.Message);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 旧版 PlayerPrefs 一次性迁移（只在 JSON 主档从未存在时被调用）。
+    /// 逐键读取与重构前 1:1 对齐，"缺键保持字段初始值"靠 GetXxx(key, 当前值) 天然成立。
+    /// 判定"是否有旧档"用 pp_lastSaveTimeTicks：只有真正 Save 过才会写下非 0 值。
+    /// 旧键迁移后不删除，留作人工回滚兜底。
+    /// </summary>
+    private bool TryMigrateFromPlayerPrefs()
+    {
+        if (!long.TryParse(PlayerPrefs.GetString(KeyTicks, ""), out var oldTicks) || oldTicks <= 0)
+            return false; // 从未存过档 → 不是旧档，走新档
+
         hunger = PlayerPrefs.GetFloat(KeyHunger, hunger);
         health = PlayerPrefs.GetFloat(KeyHealth, health);
         mood = PlayerPrefs.GetFloat(KeyMood, mood);
-        clean = PlayerPrefs.GetFloat(KeyClean, clean); // 旧档缺键→保持 100（任务17D）
+        clean = PlayerPrefs.GetFloat(KeyClean, clean);
         if (long.TryParse(PlayerPrefs.GetString(KeyCoins, ""), out var c)) coins = c;
-        if (long.TryParse(PlayerPrefs.GetString(KeyTicks, ""), out var t)) lastSaveTimeTicks = t;
+        lastSaveTimeTicks = oldTicks;
         ownedItems = PlayerPrefs.GetString(KeyOwned, ownedItems);
         equippedHat = PlayerPrefs.GetString(KeyEquippedHat, equippedHat);
         equippedScarf = PlayerPrefs.GetString(KeyEquippedScarf, equippedScarf);
         equippedGlasses = PlayerPrefs.GetString(KeyEquippedGlasses, equippedGlasses);
         if (long.TryParse(PlayerPrefs.GetString(KeyBirthTicks, ""), out var bt)) birthTimeTicks = bt;
-        if (long.TryParse(PlayerPrefs.GetString(KeyLastSignInDate, ""), out var lsd)) lastSignInDateTicks = lsd; // 旧档缺键→保持 0
-        signInStreak = PlayerPrefs.GetInt(KeySignInStreak, signInStreak); // 旧档缺键→保持 0
-        feedCount = PlayerPrefs.GetInt(KeyFeedCount, feedCount);                     // 旧档缺键→保持 0（任务15A）
-        bathCount = PlayerPrefs.GetInt(KeyBathCount, bathCount);                     // 旧档缺键→保持 0
-        yardCount = PlayerPrefs.GetInt(KeyYardCount, yardCount);                     // 旧档缺键→保持 0
-        sleepCount = PlayerPrefs.GetInt(KeySleepCount, sleepCount);                 // 旧档缺键→保持 0
-        unlockedAchievements = PlayerPrefs.GetString(KeyUnlockedAchievements, unlockedAchievements); // 旧档缺键→保持空串
-        diaryEntries = PlayerPrefs.GetString(KeyDiaryEntries, diaryEntries); // 旧档缺键→保持空串（任务16A）
-        isDead = PlayerPrefs.GetInt(KeyIsDead, 0) == 1;                // 旧档缺键→false（任务17E）
-        if (long.TryParse(PlayerPrefs.GetString(KeyNightAwakeUntil, ""), out var nau)) nightAwakeUntilTicks = nau; // 旧档缺键→保持 0（任务17F）
-        if (long.TryParse(PlayerPrefs.GetString(KeyLastMorningDrop, ""), out var lmd)) lastMorningDropDateTicks = lmd; // 旧档缺键→保持 0（任务17F）
-        patCountToday = PlayerPrefs.GetInt(KeyPatCountToday, patCountToday); // 旧档缺键→保持 0（任务17F-补丁）
-        if (long.TryParse(PlayerPrefs.GetString(KeyLastPatDate, ""), out var lpd)) lastPatDateTicks = lpd; // 旧档缺键→保持 0（任务17F-补丁）
-        mood = Mathf.Min(100f, mood); // 任务17G：心情封顶 100（修旧档超 100，如 1453；食物不封顶）
+        if (long.TryParse(PlayerPrefs.GetString(KeyLastSignInDate, ""), out var lsd)) lastSignInDateTicks = lsd;
+        signInStreak = PlayerPrefs.GetInt(KeySignInStreak, signInStreak);
+        feedCount = PlayerPrefs.GetInt(KeyFeedCount, feedCount);
+        bathCount = PlayerPrefs.GetInt(KeyBathCount, bathCount);
+        yardCount = PlayerPrefs.GetInt(KeyYardCount, yardCount);
+        sleepCount = PlayerPrefs.GetInt(KeySleepCount, sleepCount);
+        unlockedAchievements = PlayerPrefs.GetString(KeyUnlockedAchievements, unlockedAchievements);
+        diaryEntries = PlayerPrefs.GetString(KeyDiaryEntries, diaryEntries);
+        isDead = PlayerPrefs.GetInt(KeyIsDead, 0) == 1;
+        if (long.TryParse(PlayerPrefs.GetString(KeyNightAwakeUntil, ""), out var nau)) nightAwakeUntilTicks = nau;
+        if (long.TryParse(PlayerPrefs.GetString(KeyLastMorningDrop, ""), out var lmd)) lastMorningDropDateTicks = lmd;
+        patCountToday = PlayerPrefs.GetInt(KeyPatCountToday, patCountToday);
+        if (long.TryParse(PlayerPrefs.GetString(KeyLastPatDate, ""), out var lpd)) lastPatDateTicks = lpd;
+
+        // 经济重设收尾（与 MigrateDto 同一套规则）：
+        // 从旧 PlayerPrefs 搬过来的档同样带着开发期测试数据，迁移时一并收敛，否则会直接写成新版本、再也改不掉。
+        if (coins > 100000L) coins = 1000L;
+        hunger = Mathf.Min(100f, hunger);
+        clean = Mathf.Min(100f, clean);
+        mood = Mathf.Min(100f, mood); // 任务17G：心情封顶 100（修旧档超 100，如 1453；食物不封顶→此处一并收敛测试残留）
+        health = Mathf.Min(100f, health);
+        economyReset = true;          // 已经收敛过，打标记，防止后续再次触发
+        return true;
+    }
+
+    /// <summary>把 DTO 应用到内存字段；字符串空引用统一兜成空串，long 解析失败则保留当前值</summary>
+    private void ApplyFromDto(SaveData dto)
+    {
+        economyReset = dto.economyReset;   // 存档元数据：标记是否已做过一次性经济重设
+        hunger = dto.hunger;
+        health = dto.health;
+        mood = dto.mood;
+        clean = dto.clean;
+        if (long.TryParse(dto.coins, out var c)) coins = c;
+        if (long.TryParse(dto.lastSaveTimeTicks, out var t)) lastSaveTimeTicks = t;
+        ownedItems = dto.ownedItems ?? "";
+        equippedHat = dto.equippedHat ?? "";
+        equippedScarf = dto.equippedScarf ?? "";
+        equippedGlasses = dto.equippedGlasses ?? "";
+        if (long.TryParse(dto.birthTimeTicks, out var bt)) birthTimeTicks = bt;
+        if (long.TryParse(dto.lastSignInDateTicks, out var lsd)) lastSignInDateTicks = lsd;
+        signInStreak = dto.signInStreak;
+        feedCount = dto.feedCount;
+        bathCount = dto.bathCount;
+        yardCount = dto.yardCount;
+        sleepCount = dto.sleepCount;
+        unlockedAchievements = dto.unlockedAchievements ?? "";
+        diaryEntries = dto.diaryEntries ?? "";
+        isDead = dto.isDead;
+        if (long.TryParse(dto.nightAwakeUntilTicks, out var nau)) nightAwakeUntilTicks = nau;
+        if (long.TryParse(dto.lastMorningDropDateTicks, out var lmd)) lastMorningDropDateTicks = lmd;
+        patCountToday = dto.patCountToday;
+        if (long.TryParse(dto.lastPatDateTicks, out var lpd)) lastPatDateTicks = lpd;
+        yardCountToday = dto.yardCountToday;
+        if (long.TryParse(dto.lastYardDateTicks, out var lyd)) lastYardDateTicks = lyd;
+        mood = Mathf.Min(100f, mood); // 任务17G：心情封顶 100（手改 JSON 写超了也不越界）
+    }
+
+    /// <summary>调试用：把当前内存状态导出一份 JSON 到指定目录（不改变存档），返回写出路径；失败返回 null</summary>
+    public string ExportSaveSnapshot(string directory)
+    {
+        try
+        {
+            if (!Directory.Exists(directory)) Directory.CreateDirectory(directory);
+            string file = Path.Combine(directory, "pocketpet_save_export.json");
+            File.WriteAllText(file, JsonUtility.ToJson(BuildDto(), true));
+            return file;
+        }
+        catch (Exception e)
+        {
+            Debug.LogError("[存档] 导出快照失败：" + e.Message);
+            return null;
+        }
     }
 
     /// <summary>离线衰减（任务17F）：按小时迭代，晚上一律睡（不掉值）；每天 6 点后第一个白天 chunk 晨扣 30（与在线同日去重）；上限 60 天；死亡跳过，末尾判死亡（即时存档）</summary>
@@ -339,8 +580,31 @@ public class GameData : MonoBehaviour
         if (lastPatDateTicks != today) { lastPatDateTicks = today; patCountToday = 0; }
         if (patCountToday >= PatDailyLimit) return false;
         patCountToday++;
-        mood = Mathf.Clamp(mood + 5f, 0f, 100f);
+        // A+ 软天花板：心情已到 70 就不再涨，但次数照消耗（老板拍板：用户愿意摸就让他摸）
+        if (mood < MoodSoftCap) mood = Mathf.Clamp(mood + 5f, 0f, 100f);
         Save();
+        return true;
+    }
+
+    // ---------------- 散步日限（A+ 上限机制） ----------------
+
+    /// <summary>今天还能陪散步几次（跨天视为满额，不改动任何状态，供 UI 显示）</summary>
+    public int GetYardRemainingToday()
+    {
+        if (lastYardDateTicks != DateTime.Today.Ticks) return YardDailyLimit; // 未跨天记录 → 新的一天，满额
+        return Mathf.Max(0, YardDailyLimit - yardCountToday);
+    }
+
+    /// <summary>
+    /// 消耗一次今日散步额度：还有额度则次数 +1 并返回 true；已用完返回 false 且不消耗。
+    /// 跨天自动清零。注意：调用方必须先确认心情没到软天花板，否则等于白烧一次额度。
+    /// </summary>
+    public bool TryConsumeYardToday()
+    {
+        long today = DateTime.Today.Ticks;
+        if (lastYardDateTicks != today) { lastYardDateTicks = today; yardCountToday = 0; }
+        if (yardCountToday >= YardDailyLimit) return false;
+        yardCountToday++;
         return true;
     }
 
