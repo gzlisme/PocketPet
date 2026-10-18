@@ -34,6 +34,7 @@ public class GameData : MonoBehaviour
     public string equippedHat = "";      // 已装备帽子 id（空 = 未装备）
     public string equippedScarf = "";   // 已装备围巾 id
     public string equippedGlasses = ""; // 已装备墨镜 id
+    public string equippedToy = "";     // 当前选中的玩具 id（空 = 还没有玩具；wb 分支新增，玩具不占装饰槽位）
 
     // ---- 进化字段（阶段三任务11；17G 起只剩出生时间——照顾质量分体系已删）----
     public long birthTimeTicks = 0;  // 出生时间戳（首次启动在 Awake 初始化，DateTime.Now）
@@ -53,6 +54,10 @@ public class GameData : MonoBehaviour
     // ---- 碎碎念字段（阶段四任务16A）----
     public string diaryEntries = "";       // 碎碎念记录："日期|内容;日期|内容"，最多保留最近 30 条（空串 = 尚无记录）
 
+    // ---- 回忆录字段（wb 分支：小鸡成长史，自动记录）----
+    public string memories = "";           // 自动事件记录："日期|内容;..."，与玩家手写的碎碎念分开存，条数不设上限
+    private const int MaxMemories = 2000;  // 硬保护：极端情况下防止存档无限膨胀（正常玩十年也到不了）
+
     // ---- 疲劳与睡觉（任务17D/17F）----
     private long awakeSinceTicks = 0;   // 连续醒着起点（Awake 设；睡着清零、醒着重启，不存档）
     private long nightAwakeUntilTicks = 0;  // 晚上唤醒截止（UtcTicks），0 或已过 = 睡着（任务17F，存档）
@@ -65,6 +70,10 @@ public class GameData : MonoBehaviour
     // ---- 散步日限（A+ 上限机制，存档）----
     private int yardCountToday = 0;      // 今日已散步次数（跨天由 TryConsumeYardToday 自动清零）
     private long lastYardDateTicks = 0;  // 上次散步日期（Today.Ticks）
+
+    // ---- 陪玩玩具（wb 分支，存档）----
+    private int toyCountToday = 0;       // 今日已陪玩玩具次数
+    private long lastToyDateTicks = 0;   // 上次陪玩日期（Today.Ticks）
 
     // ---- 存档元数据（wb 分支）----
     private bool economyReset = false;   // 经济重设是否已执行（一次性标记，见 MigrateDto）
@@ -93,6 +102,9 @@ public class GameData : MonoBehaviour
 
     /// <summary>陪散步每日上限（次数，不是金币）：免费项必须有日限，否则金币再多也不影响它刷满心情</summary>
     public const int YardDailyLimit = 5;
+
+    /// <summary>陪玩玩具每日上限（次数）：玩具是买断制，若不限次就等于用 300 金币买了个无限心情来源</summary>
+    public const int ToyDailyLimit = 3;
 
     // ---- 疲劳阈值与倍率（任务17D，连续在线时长）----
     private const double FatigueThreshold1Hours = 16.0;
@@ -151,7 +163,11 @@ public class GameData : MonoBehaviour
         awakeSinceTicks = DateTime.UtcNow.Ticks; // 任务17D：连续在线起点（疲劳计时，不存档）
         if (lastMorningDropDateTicks == 0)
             lastMorningDropDateTicks = DateTime.Today.Ticks; // 任务17F：首次启动当天不扣，次日 6 点起扣
-        if (birthTimeTicks <= 0) birthTimeTicks = DateTime.Now.Ticks; // 首次启动初始化出生时间（任务11）
+        if (birthTimeTicks <= 0)
+        {
+            birthTimeTicks = DateTime.Now.Ticks; // 首次启动初始化出生时间（任务11）
+            AddMemory("我来到这个家啦");          // wb：回忆录第一条
+        }
         ApplyOfflineDecay();    // 再按离线时长扣减
     }
 
@@ -245,7 +261,12 @@ public class GameData : MonoBehaviour
     /// <summary>死亡判定（任务17E）：未死且 health≤0 → 置 isDead 并立即存档（任务17F 起即时落盘，防强杀丢标记）</summary>
     private void CheckDeath()
     {
-        if (!isDead && health <= 0f) { isDead = true; Save(); }
+        if (!isDead && health <= 0f)
+        {
+            isDead = true;
+            AddMemory("它睡着了，再也没醒过来"); // wb：回忆录最后一条
+            Save();
+        }
     }
 
     // ================= 存档层（wb 分支重构：PlayerPrefs → persistentDataPath JSON） =================
@@ -294,6 +315,7 @@ public class GameData : MonoBehaviour
             equippedHat = equippedHat ?? "",
             equippedScarf = equippedScarf ?? "",
             equippedGlasses = equippedGlasses ?? "",
+            equippedToy = equippedToy ?? "",
             birthTimeTicks = birthTimeTicks.ToString(),
             lastSignInDateTicks = lastSignInDateTicks.ToString(),
             signInStreak = signInStreak,
@@ -303,6 +325,7 @@ public class GameData : MonoBehaviour
             sleepCount = sleepCount,
             unlockedAchievements = unlockedAchievements ?? "",
             diaryEntries = diaryEntries ?? "",
+            memories = memories ?? "",
             isDead = isDead,
             nightAwakeUntilTicks = nightAwakeUntilTicks.ToString(),
             lastMorningDropDateTicks = lastMorningDropDateTicks.ToString(),
@@ -310,6 +333,8 @@ public class GameData : MonoBehaviour
             lastPatDateTicks = lastPatDateTicks.ToString(),
             yardCountToday = yardCountToday,
             lastYardDateTicks = lastYardDateTicks.ToString(),
+            toyCountToday = toyCountToday,
+            lastToyDateTicks = lastToyDateTicks.ToString(),
         };
     }
 
@@ -479,6 +504,7 @@ public class GameData : MonoBehaviour
         equippedHat = dto.equippedHat ?? "";
         equippedScarf = dto.equippedScarf ?? "";
         equippedGlasses = dto.equippedGlasses ?? "";
+        equippedToy = dto.equippedToy ?? "";
         if (long.TryParse(dto.birthTimeTicks, out var bt)) birthTimeTicks = bt;
         if (long.TryParse(dto.lastSignInDateTicks, out var lsd)) lastSignInDateTicks = lsd;
         signInStreak = dto.signInStreak;
@@ -488,6 +514,7 @@ public class GameData : MonoBehaviour
         sleepCount = dto.sleepCount;
         unlockedAchievements = dto.unlockedAchievements ?? "";
         diaryEntries = dto.diaryEntries ?? "";
+        memories = dto.memories ?? "";
         isDead = dto.isDead;
         if (long.TryParse(dto.nightAwakeUntilTicks, out var nau)) nightAwakeUntilTicks = nau;
         if (long.TryParse(dto.lastMorningDropDateTicks, out var lmd)) lastMorningDropDateTicks = lmd;
@@ -495,6 +522,8 @@ public class GameData : MonoBehaviour
         if (long.TryParse(dto.lastPatDateTicks, out var lpd)) lastPatDateTicks = lpd;
         yardCountToday = dto.yardCountToday;
         if (long.TryParse(dto.lastYardDateTicks, out var lyd)) lastYardDateTicks = lyd;
+        toyCountToday = dto.toyCountToday;
+        if (long.TryParse(dto.lastToyDateTicks, out var ltd)) lastToyDateTicks = ltd;
         mood = Mathf.Min(100f, mood); // 任务17G：心情封顶 100（手改 JSON 写超了也不越界）
     }
 
@@ -608,6 +637,52 @@ public class GameData : MonoBehaviour
         return true;
     }
 
+    // ---------------- 陪玩玩具（wb 分支：豪华玩具下线，改由商店买断） ----------------
+
+    /// <summary>是否已拥有某商品（ownedItems 逗号拆分精确比对；空 id / 空串一律 false）</summary>
+    public bool IsOwnedItem(string itemId)
+    {
+        if (string.IsNullOrEmpty(itemId) || string.IsNullOrEmpty(ownedItems)) return false;
+        foreach (var s in ownedItems.Split(','))
+            if (s == itemId) return true;
+        return false;
+    }
+
+    /// <summary>是否至少拥有一件玩具（供院子按钮决定显示"去买"还是"去玩"）</summary>
+    public bool HasAnyToy()
+    {
+        foreach (var it in ShopItem.AllToys())
+            if (IsOwnedItem(it.id)) return true;
+        return false;
+    }
+
+    /// <summary>今天还能陪玩几次（跨天视为满额；不改动任何状态，供 UI 显示）</summary>
+    public int GetToyRemainingToday()
+    {
+        if (lastToyDateTicks != DateTime.Today.Ticks) return ToyDailyLimit;
+        return Mathf.Max(0, ToyDailyLimit - toyCountToday);
+    }
+
+    /// <summary>
+    /// 陪玩一次当前选中的玩具：无玩具 / 次数用完 / id 无效 → 返回 null 且不改任何状态；
+    /// 成功 → 次数 +1、按 toyMoodGain 加心情（钳 100）、立即存档，返回玩到的那件玩具。
+    /// 注意：玩具**不受** MoodSoftCap 限制 —— 花钱买的那部分心情本来就该能突破免费项的 70 天花板。
+    /// </summary>
+    public ShopItem PlayToy()
+    {
+        var item = ShopItem.FindById(equippedToy);
+        if (item == null || !item.IsToy) return null;
+
+        long today = DateTime.Today.Ticks;
+        if (lastToyDateTicks != today) { lastToyDateTicks = today; toyCountToday = 0; }
+        if (toyCountToday >= ToyDailyLimit) return null;
+
+        toyCountToday++;
+        mood = Mathf.Clamp(mood + item.toyMoodGain, 0f, 100f);
+        Save();
+        return item;
+    }
+
     // 退出 / 失焦时自动存档（编辑器停止 Play 也会触发 OnApplicationQuit）
     private void OnApplicationQuit() { Save(); }
     private void OnApplicationPause(bool pause) { if (pause) Save(); }
@@ -661,6 +736,7 @@ public class GameData : MonoBehaviour
         if (signInStreak > 7) signInStreak = 1; // 一周一轮：第 8 天回到第 1 天
         lastSignInDateTicks = today;
         coins += reward;
+        if (signInStreak == 7) AddMemory("连着签到 7 天，全勤！"); // wb：回忆录
         Save(); // 立即存档
         CheckAndGrantAchievements(); // 任务15B：签到后检测并发放成就（sign_7 全勤奖）
         return reward;
@@ -669,16 +745,36 @@ public class GameData : MonoBehaviour
     // ---------------- 成就（阶段四任务15A） ----------------
 
     /// <summary>累计喂食次数 +1（任务15B：+1 后检测并发放成就）</summary>
-    public void AddFeedCount() { feedCount += 1; CheckAndGrantAchievements(); }
+    public void AddFeedCount()
+    {
+        feedCount += 1;
+        if (feedCount == 1) AddMemory("第一次吃到好吃的"); // wb：回忆录
+        CheckAndGrantAchievements();
+    }
 
     /// <summary>累计洗澡次数 +1（任务15B：+1 后检测并发放成就）</summary>
-    public void AddBathCount() { bathCount += 1; CheckAndGrantAchievements(); }
+    public void AddBathCount()
+    {
+        bathCount += 1;
+        if (bathCount == 1) AddMemory("第一次洗澡，香香的"); // wb：回忆录
+        CheckAndGrantAchievements();
+    }
 
     /// <summary>累计逗鸡次数 +1（任务15B：+1 后检测并发放成就）</summary>
-    public void AddYardCount() { yardCount += 1; CheckAndGrantAchievements(); }
+    public void AddYardCount()
+    {
+        yardCount += 1;
+        if (yardCount == 1) AddMemory("第一次出去玩，好开心"); // wb：回忆录
+        CheckAndGrantAchievements();
+    }
 
     /// <summary>累计睡觉次数 +1（任务15B：+1 后检测并发放成就）</summary>
-    public void AddSleepCount() { sleepCount += 1; CheckAndGrantAchievements(); }
+    public void AddSleepCount()
+    {
+        sleepCount += 1;
+        if (sleepCount == 1) AddMemory("第一次睡得这么香"); // wb：回忆录
+        CheckAndGrantAchievements();
+    }
 
     /// <summary>成就是否已解锁：unlockedAchievements 按逗号拆分精确比对；空串（尚无成就）返回 false</summary>
     public bool IsAchievementUnlocked(string id)
@@ -764,6 +860,7 @@ public class GameData : MonoBehaviour
             if (GetAchievementProgress(def.id) < def.target) continue;
             UnlockAchievement(def.id);
             coins += def.reward;
+            AddMemory("拿到了「" + def.name + "」"); // wb：回忆录（在 Save 之前，随这次存档一起落盘）
             Save();
             // 任务15D：解锁时缓存提示消息供 UI 反馈文本显示（多个用"；"分隔；解锁逻辑本身不变）
             string oneMessage = "成就达成：" + def.name + " +" + FormatCoins(def.reward) + " 金币"; // 单A：改走分段格式化；空格与签到飘字统一
@@ -810,5 +907,30 @@ public class GameData : MonoBehaviour
     public string GetDiaryEntries()
     {
         return diaryEntries;
+    }
+
+    // ---------------- 小鸡回忆录（wb 分支） ----------------
+
+    /// <summary>
+    /// 追加一条回忆录：小鸡成长过程中的自动事件记录，与玩家手写的碎碎念分开存。
+    /// 格式 "yyyy-MM-dd|内容;"，条数不设上限（老板要求），仅留 MaxMemories 硬保护防止极端膨胀。
+    /// 内容里的分隔符会被替换成全角，避免解析错乱。不自动存档，由调用方决定时机。
+    /// </summary>
+    public void AddMemory(string content)
+    {
+        if (string.IsNullOrEmpty(content)) return;
+        content = content.Replace(";", "；").Replace("|", "｜"); // 别让内容破坏分隔符
+        string entry = DateTime.Today.ToString("yyyy-MM-dd") + "|" + content;
+        memories = string.IsNullOrEmpty(memories) ? entry : memories + ";" + entry;
+
+        string[] parts = memories.Split(';');
+        if (parts.Length > MaxMemories)
+            memories = string.Join(";", parts, parts.Length - MaxMemories, MaxMemories); // 丢弃最旧的
+    }
+
+    /// <summary>返回回忆录原始字符串（格式 "日期|内容;日期|内容"，供 UI 解析）</summary>
+    public string GetMemories()
+    {
+        return memories;
     }
 }

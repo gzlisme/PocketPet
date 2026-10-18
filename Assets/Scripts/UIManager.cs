@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -56,6 +57,11 @@ public class UIManager : MonoBehaviour
     private SpriteRenderer chickSr;
     private string lastStage;       // 上次阶段（阶段变化 Console 提示 + 避免每帧重设）
 
+    // ---- 玩具系统（wb 分支：豪华玩具下线，玩具改由商店买断）----
+    private Button btnYardToy;           // 院子里的玩具按钮（复用场景原 Btn_PlayPremium，不删对象）
+    private Text txtYardToy;             // 该按钮上的文字
+    private readonly List<Button> runtimeShopButtons = new List<Button>(); // 商店按钮运行时列表（含按需动态补的）
+
     // 假切换的背景色映射（任务4原样保留）
     private static readonly Color RoomYard    = new Color(76f / 255f, 175f / 255f, 80f / 255f);    // 院子 #4CAF50
     private static readonly Color RoomDining   = new Color(1f, 215f / 255f, 0f);                    // 餐厅 #FFD700
@@ -78,13 +84,25 @@ public class UIManager : MonoBehaviour
     {
         RefreshSignInButton(); // 任务14：进场刷新签到按钮（Start 时全部 Awake 已完成，GameData 必已读档——工单拍板 B 方案）
 
-        // 老板拍板：豪华玩具下线（玩具改由商店购买）。这里直接隐藏场景对象而非删场景结构——
-        // 改场景父子关系风险高，隐藏效果一样且随时可恢复。Transform.Find 能找到 inactive 子对象，故重复调用也安全。
+        // 豪华玩具下线（玩具改由商店买断）：原按钮不删、改为「玩具入口」复用。
+        // 没买玩具时点它提示去商店，买了之后点它陪玩。场景结构零改动。
         if (yardPanel != null)
         {
-            var premium = yardPanel.transform.Find("Btn_PlayPremium");
-            if (premium != null) premium.gameObject.SetActive(false);
+            // 递归查找而非 Transform.Find 固定路径：按钮已被搬进 YardButtons 自动布局容器，
+            // 固定路径 "Btn_PlayPremium" 会失效（Find 只找直接子对象，不递归）。
+            // 用 GetComponentsInChildren 按名字找，对任何层级变动免疫。
+            foreach (var b in yardPanel.GetComponentsInChildren<Button>(true))
+            {
+                if (b.name != "Btn_PlayPremium") continue;
+                btnYardToy = b;
+                txtYardToy = b.GetComponentInChildren<Text>(true);
+                break;
+            }
         }
+        RefreshYardToyButton();
+
+        // 商店按钮按商品数量动态补足并统一重排：以后再加商品不用再动场景布局
+        BuildShopButtons();
     }
 
     private void Update()
@@ -107,7 +125,10 @@ public class UIManager : MonoBehaviour
         string stage = gd.GetCurrentStage();
         if (stage == lastStage) return;
         if (lastStage != null && StageOrder(stage) > StageOrder(lastStage))
+        {
+            gd.AddMemory("长大了，变成" + stage + "了"); // wb：回忆录（随下一次存档落盘）
             ShowEvolutionPopup(lastStage, stage); // 任务12：阶段升高弹「进化了！」（回退/相同不弹）
+        }
         ApplyEvolutionVisual();
     }
 
@@ -315,15 +336,36 @@ public class UIManager : MonoBehaviour
     /// <summary>陪它散步：免费，心情 +5</summary>
     public void PlayFree() { TryYard(0L, 5f); }
 
-    /// <summary>豪华玩具已下线（老板决定：玩具改由商店购买）。
-    /// 保留方法签名与场景按钮绑定，不改场景；当前不扣钱、不加心情、不计成就，仅提示去商店。
-    /// B 单（玩具子系统）可在此处接回真实逻辑。</summary>
+    /// <summary>
+    /// 院子里的玩具按钮（复用原 Btn_PlayPremium，不删场景对象）。两种状态：
+    /// 没买玩具 → 提示去商店；买了 → 陪玩当前选中的玩具（每日 3 次，心情 +玩具加成）。
+    /// 玩具不受心情软天花板（70）限制，是花钱突破免费项上限的途径。
+    /// </summary>
     public void PlayPremium()
     {
         var gd = GameData.Instance;
         if (gd == null || gd.isDead) return; // 死亡期间禁止互动
-        if (yardFeedbackText != null) yardFeedbackText.text = "玩具去商店买啦";
-        SpawnFloatingText("玩具去商店买啦", Color.white, 0f, 200f, 120f, 1.5f);
+        gd.NotifyInteraction(); // 任务17F：夜间互动唤醒 5 分钟
+
+        if (!gd.HasAnyToy())
+        {
+            if (yardFeedbackText != null) yardFeedbackText.text = "玩具在商店里，去买一个吧";
+            SpawnFloatingText("先去商店买玩具", Color.white, 0f, 200f, 120f, 1.5f);
+            return;
+        }
+
+        var toy = gd.PlayToy();
+        if (toy == null)
+        {
+            if (yardFeedbackText != null) yardFeedbackText.text = "它今天玩够了，明天再来";
+            SpawnFloatingText("它玩累啦", Color.white, 0f, 200f, 120f, 1.5f);
+            RefreshYardToyButton();
+            return;
+        }
+
+        if (yardFeedbackText != null) yardFeedbackText.text = "玩" + toy.displayName + "，它开心坏了";
+        SpawnFloatingText(ToyMoodText(gd.mood), FloatGainColor, 0f, 200f, 120f, 1.5f);
+        RefreshYardToyButton();
     }
 
     /// <summary>逗鸡核心：收费项金币不足→提示不扣钱；A+ 起加两道闸（心情软天花板、每日次数）</summary>
@@ -419,6 +461,37 @@ public class UIManager : MonoBehaviour
         bool owned = IsOwned(gd, itemId);
         string equippedId = GetEquipped(gd, item.slot);
 
+        // 玩具（wb 分支）：买断后不"装备"到小鸡身上，而是选为「当前玩的玩具」，去院子里陪玩
+        if (item.IsToy)
+        {
+            if (!owned)
+            {
+                if (gd.coins < item.price)
+                {
+                    if (shopFeedbackText != null) shopFeedbackText.text = "金币不足";
+                    return; // 不扣钱
+                }
+                gd.coins -= item.price;
+                AddOwned(gd, itemId);
+                gd.equippedToy = itemId; // 买下即选中，省得再点一次
+                if (shopFeedbackText != null) shopFeedbackText.text = "买到了！去院子陪它玩";
+            }
+            else if (gd.equippedToy == itemId)
+            {
+                if (shopFeedbackText != null) shopFeedbackText.text = "正在玩这个";
+            }
+            else
+            {
+                gd.equippedToy = itemId;
+                if (shopFeedbackText != null) shopFeedbackText.text = "换成" + item.displayName + "了";
+            }
+            gd.Save();
+            RefreshShopCoins();
+            RefreshShopButtons();
+            RefreshYardToyButton();
+            return;
+        }
+
         if (!owned)
         {
             if (gd.coins < item.price)
@@ -479,23 +552,37 @@ public class UIManager : MonoBehaviour
             shopCoinsText.text = "当前金币：" + GameData.FormatCoins(gd.coins);
     }
 
-    /// <summary>任务17H：刷新商店按钮文字三态（未购买/已拥有未穿/使用中）</summary>
+    /// <summary>任务17H：刷新商店按钮文字（装饰品三态 / 玩具三态，各自文案不同）</summary>
     private void RefreshShopButtons()
     {
-        if (shopItemButtons == null) return;
+        if (runtimeShopButtons.Count == 0) return; // 尚未构建
         var gd = GameData.Instance;
         if (gd == null) return;
-        for (int i = 0; i < ShopItem.AllItems.Count && i < shopItemButtons.Length; i++)
+
+        for (int i = 0; i < runtimeShopButtons.Count && i < ShopItem.AllItems.Count; i++)
         {
             var item = ShopItem.AllItems[i];
-            var btn = shopItemButtons[i];
+            var btn = runtimeShopButtons[i];
             if (btn == null) continue;
             var txt = btn.GetComponentInChildren<Text>();
             if (txt == null) continue;
 
             bool owned = IsOwned(gd, item.id);
-            string equippedId = GetEquipped(gd, item.slot);
             string priceText = GameData.FormatCoins(item.price);
+
+            // 玩具：没有"卸下"概念，只有 未购买 / 正在玩 / 已拥有待换上
+            if (item.IsToy)
+            {
+                if (!owned)
+                    txt.text = item.displayName + "（" + priceText + "）";
+                else if (gd.equippedToy == item.id)
+                    txt.text = item.displayName + "（正在玩）";
+                else
+                    txt.text = item.displayName + "（已拥有 · 点击换上）";
+                continue;
+            }
+
+            string equippedId = GetEquipped(gd, item.slot);
 
             if (!owned)
                 txt.text = item.displayName + "（" + priceText + "）";
@@ -503,6 +590,86 @@ public class UIManager : MonoBehaviour
                 txt.text = item.displayName + "（使用中 · 点击卸下）";
             else
                 txt.text = item.displayName + "（已拥有 · 点击装备）";
+        }
+    }
+
+    // ---- 商店按钮动态排布（wb 分支：商品数量不再被场景布局锁死） ----
+
+    /// <summary>
+    /// 构建商店按钮列表：先用场景里已绑定的按钮，商品数超出时以最后一个为模板动态补足，
+    /// 再统一重排位置并重新绑定点击事件。此后加商品只需改 ShopItem.AllItems，不必再动场景。
+    /// </summary>
+    private void BuildShopButtons()
+    {
+        runtimeShopButtons.Clear();
+        if (shopItemButtons != null)
+        {
+            foreach (var b in shopItemButtons)
+                if (b != null) runtimeShopButtons.Add(b);
+        }
+        if (runtimeShopButtons.Count == 0) return; // 场景没绑按钮，什么都不做
+
+        int need = ShopItem.AllItems.Count;
+
+        // 场景按钮比商品多：多余的藏起来，避免留下无商品的空按钮
+        if (runtimeShopButtons.Count > need)
+        {
+            for (int i = need; i < runtimeShopButtons.Count; i++)
+                if (runtimeShopButtons[i] != null) runtimeShopButtons[i].gameObject.SetActive(false);
+            runtimeShopButtons.RemoveRange(need, runtimeShopButtons.Count - need);
+        }
+
+        // 商品比场景按钮多：复制最后一个按钮补足
+        var template = runtimeShopButtons[runtimeShopButtons.Count - 1];
+        while (runtimeShopButtons.Count < need)
+        {
+            var clone = Instantiate(template, template.transform.parent);
+            clone.name = "Btn_Shop_Auto" + runtimeShopButtons.Count;
+            runtimeShopButtons.Add(clone);
+        }
+
+        LayoutShopButtons();
+        BindShopButtons();
+        RefreshShopButtons();
+    }
+
+    /// <summary>
+    /// 把按钮按数量平均铺在面板中部：数量越多单个越矮，间距恒定。
+    /// 5 个商品时算出的位置与原手工布局完全一致（h=110、步长 130），不会破坏现有观感。
+    /// </summary>
+    private void LayoutShopButtons()
+    {
+        int n = Mathf.Min(runtimeShopButtons.Count, ShopItem.AllItems.Count);
+        if (n == 0) return;
+        const float areaTop = 375f;     // 标题下方起点
+        const float areaBottom = -290f; // 关闭按钮上方终点
+        const float gap = 20f;          // 间距，与原布局一致
+        float area = areaTop - areaBottom;
+        float h = Mathf.Clamp((area - (n - 1) * gap) / n, 56f, 110f);
+        float y = areaTop - h / 2f;
+        for (int i = 0; i < n; i++)
+        {
+            var rt = runtimeShopButtons[i].GetComponent<RectTransform>();
+            if (rt == null) continue;
+            rt.anchorMin = new Vector2(0.5f, 0.5f);
+            rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(700f, h);
+            rt.anchoredPosition = new Vector2(0f, y);
+            y -= (h + gap);
+        }
+    }
+
+    /// <summary>按顺序把按钮重新绑到对应商品，不依赖场景里 Inspector 的手工绑定</summary>
+    private void BindShopButtons()
+    {
+        for (int i = 0; i < runtimeShopButtons.Count && i < ShopItem.AllItems.Count; i++)
+        {
+            int idx = i; // 必须用局部变量捕获：直接用 i 会让所有按钮都绑到最后一个商品
+            var btn = runtimeShopButtons[i];
+            if (btn == null) continue;
+            btn.onClick.RemoveAllListeners();
+            btn.onClick.AddListener(() => BuyOrToggleItem(ShopItem.AllItems[idx].id));
         }
     }
 
@@ -687,6 +854,44 @@ public class UIManager : MonoBehaviour
         return "蹲在角落";
     }
 
+    /// <summary>陪玩玩具文案（按玩完后的心情值分档；比散步更闹腾；文案必须 ≤8 汉字防截断）</summary>
+    private static string ToyMoodText(float m)
+    {
+        if (m >= 96f) return "它追着玩具跑";
+        if (m >= 90f) return "它玩疯了";
+        if (m >= 80f) return "它扑过来抢";
+        if (m >= 65f) return "它玩得正欢";
+        if (m >= 45f) return "它歪头看着";
+        if (m >= 25f) return "它蹭了蹭玩具";
+        return "它慢慢凑过来";
+    }
+
+    /// <summary>刷新院子玩具按钮文字：没买玩具 / 有玩具(带剩余次数) / 今日用完，三态</summary>
+    private void RefreshYardToyButton()
+    {
+        if (txtYardToy == null) return;
+        var gd = GameData.Instance;
+        if (gd == null) return;
+
+        if (!gd.HasAnyToy())
+        {
+            txtYardToy.text = "玩具去商店买";
+            return;
+        }
+
+        var toy = ShopItem.FindById(gd.equippedToy);
+        if (toy == null)
+        {
+            txtYardToy.text = "去商店挑个玩具"; // 有玩具但没选中（兜底）
+            return;
+        }
+
+        int left = gd.GetToyRemainingToday();
+        txtYardToy.text = left > 0
+            ? "玩" + toy.displayName + "（心情 +" + Mathf.RoundToInt(toy.toyMoodGain) + "，今日还剩 " + left + " 次）"
+            : toy.displayName + "（今天玩够了）";
+    }
+
     // ---------------- 签到（阶段三任务14） ----------------
 
     /// <summary>刷新抽屉入口按钮（任务16B：签到入口已改名碎碎念）——始终显示"碎碎念"且可点（签到并入发布流程，不再按签到状态置灰）</summary>
@@ -801,25 +1006,49 @@ public class UIManager : MonoBehaviour
         if (diaryPanel != null) diaryPanel.SetActive(false);
     }
 
-    /// <summary>刷新碎碎念列表：按 ";" 拆分、倒序（最新在最上），每行"日期 内容"，空记录显示提示语</summary>
+    /// <summary>
+    /// 刷新回忆录/碎碎念面板（wb 起二合一）：
+    /// 上半部分是小鸡回忆录（系统自动记录，只显示最近 8 条），下半部分是玩家手写的碎碎念（最近 10 条）。
+    /// 两者分开存储、互不覆盖；显示条数受限只是为了排版，存档本身不设上限。
+    /// </summary>
     public void RefreshDiaryPanel()
     {
         if (diaryListText == null) return;
         var gd = GameData.Instance;
         if (gd == null) return;
-        string raw = gd.GetDiaryEntries();
-        if (raw == "")
-        {
-            diaryListText.text = "还没有碎碎念，写一条吧";
-            return;
-        }
-        string[] parts = raw.Split(';');
+
         string text = "";
-        for (int i = parts.Length - 1; i >= 0; i--)
+
+        // ---- 回忆录（自动记录）----
+        string mem = gd.GetMemories();
+        if (!string.IsNullOrEmpty(mem))
         {
-            if (text.Length > 0) text += "\n";
-            text += parts[i].Replace("|", " ");
+            string[] mp = mem.Split(';');
+            int fromMem = Mathf.Max(0, mp.Length - 8); // 只展示最近 8 条
+            text += "— 小鸡回忆录 —\n";
+            for (int i = mp.Length - 1; i >= fromMem; i--)
+                text += mp[i].Replace("|", " ") + "\n";
+            text += "\n";
         }
+
+        // ---- 碎碎念（玩家手写）----
+        string raw = gd.GetDiaryEntries();
+        if (string.IsNullOrEmpty(raw))
+        {
+            text += "— 碎碎念 —\n还没有，写一条吧";
+        }
+        else
+        {
+            string[] parts = raw.Split(';');
+            int fromDiary = Mathf.Max(0, parts.Length - 10); // 只展示最近 10 条
+            text += "— 碎碎念 —\n";
+            for (int i = parts.Length - 1; i >= fromDiary; i--)
+            {
+                text += parts[i].Replace("|", " ");
+                if (i > fromDiary) text += "\n";
+            }
+        }
+
         diaryListText.text = text;
     }
 

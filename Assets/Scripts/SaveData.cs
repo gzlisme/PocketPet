@@ -41,6 +41,7 @@ public class SaveData
     public string equippedHat = "";
     public string equippedScarf = "";
     public string equippedGlasses = "";
+    public string equippedToy = "";                // 当前选中的玩具 id（空 = 还没有玩具）
 
     // ---- 进化（阶段三任务11）----
     public string birthTimeTicks = "0";            // 出生时间戳（DateTime.Now.Ticks）
@@ -59,6 +60,9 @@ public class SaveData
     // ---- 碎碎念（阶段四任务16A）----
     public string diaryEntries = "";               // "日期|内容;日期|内容"，最多最近 30 条
 
+    // ---- 回忆录（wb 分支）----
+    public string memories = "";                   // "日期|内容;..."，自动事件记录，条数不设上限
+
     // ---- 死亡（任务17E）----
     public bool isDead = false;
 
@@ -73,4 +77,8 @@ public class SaveData
     // ---- 散步日限（A+ 上限机制）----
     public int yardCountToday = 0;                 // 今日已散步次数
     public string lastYardDateTicks = "0";         // 上次散步日期（Today.Ticks）
+
+    // ---- 陪玩玩具（wb 分支）----
+    public int toyCountToday = 0;                  // 今日已陪玩玩具次数
+    public string lastToyDateTicks = "0";          // 上次陪玩日期（Today.Ticks）
 }
