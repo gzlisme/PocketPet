@@ -62,6 +62,9 @@ public class UIManager : MonoBehaviour
     private Text txtYardToy;             // 该按钮上的文字
     private readonly List<Button> runtimeShopButtons = new List<Button>(); // 商店按钮运行时列表（含按需动态补的）
 
+    // ---- 孵化系统（2026-10-19：纯代码创建，场景零改动）----
+    private HatchPanel hatchPanel;       // 孵蛋面板（愿望输入 → 抽牌 → 破壳）
+
     // 假切换的背景色映射（任务4原样保留）
     private static readonly Color RoomYard    = new Color(76f / 255f, 175f / 255f, 80f / 255f);    // 院子 #4CAF50
     private static readonly Color RoomDining   = new Color(1f, 215f / 255f, 0f);                    // 餐厅 #FFD700
@@ -103,6 +106,37 @@ public class UIManager : MonoBehaviour
 
         // 商店按钮按商品数量动态补足并统一重排：以后再加商品不用再动场景布局
         BuildShopButtons();
+
+        // ---- 孵化系统（2026-10-19）----
+        // 字体注入：UIFactory 动态创建的所有 Text 都借用现有 UI 的同一个内置字体，
+        // 保证中文表现与现有界面完全一致（项目没有自定义字体资源）。
+        UIFactory.Font = feedFeedbackText != null ? feedFeedbackText.font : null;
+        hatchPanel = HatchPanel.Create(transform);
+        CreateHatchEntryButton();
+
+        // 开局就是一颗蛋：直接把孵化面板推到玩家面前，让"它里面是什么"成为第一个问题。
+        var gdStart = GameData.Instance;
+        if (gdStart != null && gdStart.GetCurrentStage() == "蛋") hatchPanel.Show();
+    }
+
+    /// <summary>
+    /// 创建右上角孵化入口按钮（纯代码，场景零改动）。
+    /// 位置取 Canvas 右上角空隙：已有顶层按钮集中在 x∈[-330,330] / 底部一排，右上区域是空的。
+    /// </summary>
+    private void CreateHatchEntryButton()
+    {
+        UIFactory.CreateButton(transform, "BtnHatchEntry", "孵蛋",
+            new Vector2(140f, 140f), new Vector2(430f, 700f),
+            new Color(0.85f, 0.55f, 0.22f, 0.92f), OnClickHatchEntry, 34,
+            new Color(1f, 0.98f, 0.94f));
+    }
+
+    /// <summary>点击悬浮「孵蛋」入口：关掉其他面板，打开孵化面板</summary>
+    public void OnClickHatchEntry()
+    {
+        if (GameData.Instance != null && GameData.Instance.isDead) return; // 死亡期间禁止互动
+        CloseAllPanelsAndDrawer();
+        if (hatchPanel != null) hatchPanel.Show();
     }
 
     private void Update()
@@ -163,6 +197,7 @@ public class UIManager : MonoBehaviour
         CloseShopPanel();
         CloseAchievementPanel(); // 任务15C：开其他面板/开抽屉时成就面板一并关闭
         CloseDiaryPanel();       // 任务16B：开其他面板/开抽屉时碎碎念面板一并关闭
+        if (hatchPanel != null) hatchPanel.Hide(); // 孵化系统：与其余面板互斥
     }
 
     /// <summary>Bug-3 修复：打开任一房间面板前统一调用——关闭全部五个功能面板，并关抽屉（DrawerPanel 置不激活 + 隐藏抽屉外透明点击区，复用 CloseDrawer 任务6语义）</summary>
