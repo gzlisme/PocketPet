@@ -830,10 +830,15 @@ public class GameData : MonoBehaviour
     /// <summary>全部成就定义表（任务15B；17D补丁删 sleep_10，5 项）：喂食×2 / 洗澡 / 逗鸡 / 签到</summary>
     public static readonly AchievementDef[] AchievementDefs =
     {
+        // 2026-10-19 夜班：5 → 8 个，新增三档 50 次中目标（复用现有计数器，无新存档字段）。
+        // 命名一律 ≤4 汉字：成就列表是 700 宽 / 字号 40 的 Text，名字过长会换行挤压（面板高 800 容得下 8~12 行）。
         new AchievementDef { id = "feed_10",  name = "新手饲养员", target = 10,  reward = 200L },
+        new AchievementDef { id = "feed_50",  name = "喂养能手",   target = 50,  reward = 600L },
         new AchievementDef { id = "feed_100", name = "金牌饲养员", target = 100, reward = 1500L },
         new AchievementDef { id = "bath_10",  name = "爱干净",     target = 10,  reward = 200L },
+        new AchievementDef { id = "bath_50",  name = "洁净达人",   target = 50,  reward = 600L },
         new AchievementDef { id = "yard_10",  name = "游戏伙伴",   target = 10,  reward = 200L },
+        new AchievementDef { id = "yard_50",  name = "最佳玩伴",   target = 50,  reward = 600L },
         new AchievementDef { id = "sign_7",   name = "全勤奖",     target = 7,   reward = 800L },
     };
 
@@ -843,9 +848,12 @@ public class GameData : MonoBehaviour
         switch (id)
         {
             case "feed_10":
+            case "feed_50":
             case "feed_100": return feedCount;
-            case "bath_10":  return bathCount;
-            case "yard_10":  return yardCount;
+            case "bath_10":
+            case "bath_50":  return bathCount;
+            case "yard_10":
+            case "yard_50":  return yardCount;
             case "sign_7":   return signInStreak;
             default:         return 0;
         }
