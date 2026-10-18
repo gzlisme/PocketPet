@@ -581,12 +581,14 @@ public class UIManager : MonoBehaviour
             string priceText = GameData.FormatCoins(item.price);
 
             // 玩具：没有"卸下"概念，只有 未购买 / 正在玩 / 已拥有待换上
+            // 2026-10-19 夜班：未购买与正在玩两态补上心情加成——4 个玩具只显示价格，玩家没法横向比较，只能盲买
             if (item.IsToy)
             {
+                string moodText = "心情+" + Mathf.RoundToInt(item.toyMoodGain);
                 if (!owned)
-                    txt.text = item.displayName + "（" + priceText + "）";
+                    txt.text = item.displayName + "（" + priceText + " · " + moodText + "）";
                 else if (gd.equippedToy == item.id)
-                    txt.text = item.displayName + "（正在玩）";
+                    txt.text = item.displayName + "（正在玩 · " + moodText + "）";
                 else
                     txt.text = item.displayName + "（已拥有 · 点击换上）";
                 continue;
