@@ -317,13 +317,18 @@ public class UIManager : MonoBehaviour
 
     // ---------------- 院子逗鸡（任务8） ----------------
 
-    /// <summary>打开逗鸡面板（清空上次提示）</summary>
+    /// <summary>打开逗鸡面板（清空上次提示；2026-10-19 夜班：提示行改为显示今日剩余散步次数）</summary>
     public void OpenYardPanel()
     {
         if (GameData.Instance != null && GameData.Instance.isDead) return; // 任务17E：死亡期间禁止互动
         CloseAllPanelsAndDrawer();
         if (yardPanel == null) return;
-        if (yardFeedbackText != null) yardFeedbackText.text = "";
+        if (yardFeedbackText != null)
+        {
+            var gdYard = GameData.Instance;
+            int left = gdYard != null ? gdYard.GetYardRemainingToday() : 0;
+            yardFeedbackText.text = left > 0 ? "今天还能陪它走 " + left + " 次" : "今天陪它玩够了，明天再来";
+        }
         yardPanel.SetActive(true);
     }
 
@@ -414,13 +419,18 @@ public class UIManager : MonoBehaviour
 
     // ---------------- 卧室睡觉（任务9；任务17F：睡觉改全局被动机制，场景两睡觉按钮已删） ----------------
 
-    /// <summary>打开睡觉面板（清空上次提示）</summary>
+    /// <summary>打开睡觉面板（2026-10-19 夜班：原本只清空提示行，现改为显示今日剩余抚摸次数——睡觉按钮删掉后这行一直闲置）</summary>
     public void OpenBedroomPanel()
     {
         if (GameData.Instance != null && GameData.Instance.isDead) return; // 任务17E：死亡期间禁止互动
         CloseAllPanelsAndDrawer();
         if (bedroomPanel == null) return;
-        if (bedroomFeedbackText != null) bedroomFeedbackText.text = "";
+        if (bedroomFeedbackText != null)
+        {
+            var gdBed = GameData.Instance;
+            int left = gdBed != null ? gdBed.GetPatRemainingToday() : 0;
+            bedroomFeedbackText.text = left > 0 ? "今天还能摸摸它 " + left + " 次" : "它今天被摸得心满意足啦";
+        }
         bedroomPanel.SetActive(true);
     }
 

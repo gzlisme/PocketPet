@@ -615,6 +615,13 @@ public class GameData : MonoBehaviour
         return true;
     }
 
+    /// <summary>今天还能抚摸几次（跨天视为满额，不改动任何状态，供 UI 显示）</summary>
+    public int GetPatRemainingToday()
+    {
+        if (lastPatDateTicks != DateTime.Today.Ticks) return PatDailyLimit;
+        return Mathf.Max(0, PatDailyLimit - patCountToday);
+    }
+
     // ---------------- 散步日限（A+ 上限机制） ----------------
 
     /// <summary>今天还能陪散步几次（跨天视为满额，不改动任何状态，供 UI 显示）</summary>
