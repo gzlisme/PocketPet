@@ -1029,7 +1029,19 @@ public class UIManager : MonoBehaviour
         var gd = GameData.Instance;
         if (gd == null) return;
 
+        // 2026-10-19 夜班：这个 Text 是固定 700×520 的静态文本（场景无 ScrollRect），垂直溢出为截断，
+        // 内容一多下方（正是最新碎碎念）就被裁掉。改 BestFit 自动缩字号：内容少时仍是最初的 40 号。
+        diaryListText.resizeTextForBestFit = true;
+        diaryListText.resizeTextMaxSize = 40;
+        diaryListText.resizeTextMinSize = 16;
+
         string text = "";
+
+        // 签到提示：签到藏在"发碎碎念"流程里（每天第一条附带金币奖励），玩家不知道 → 面板顶部亮明状态
+        if (gd.HasSignedInToday())
+            text += "今天已签到，金币已入账\n\n";
+        else
+            text += "今天发碎碎念可领 " + gd.GetTodayReward() + " 金币\n\n";
 
         // ---- 回忆录（自动记录）----
         string mem = gd.GetMemories();
