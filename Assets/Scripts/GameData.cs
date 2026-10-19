@@ -616,6 +616,14 @@ public class GameData : MonoBehaviour
         nightAwakeUntilTicks = 0;                         // 任务17F-补丁：不继承旧睡眠窗口（新蛋回默认状态）
         lastMorningDropDateTicks = DateTime.Today.Ticks;  // 任务17F-补丁：死亡必发生在白天晨扣后，领蛋当天不重扣
         isDead = false;
+
+        // 孵化系统（Loop6）：新蛋是新的一颗蛋——清掉上一代的物种/愿望/出生证明，
+        // 玩家重新走「说愿望 → 抽牌 → 破壳」。hatchCount / pityCount 有意保留：
+        // 累计孵化数是图鉴统计，保底计数跨代累计正是保底的意义。
+        speciesId = "";
+        lastWish = "";
+        firstLine = "";
+
         Save();
     }
 

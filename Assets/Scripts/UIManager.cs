@@ -855,7 +855,8 @@ public class UIManager : MonoBehaviour
         if (deathPopup != null) deathPopup.SetActive(false);
     }
 
-    /// <summary>领养新蛋按钮：重置小鸡（ReviveAsEgg 回蛋）、关死亡弹窗、刷新进化视觉（任务17E）</summary>
+    /// <summary>领养新蛋按钮：重置小鸡（ReviveAsEgg 回蛋）、关死亡弹窗、刷新进化视觉（任务17E）；
+    /// Loop6：领养后直接弹出孵蛋面板——新蛋就该从「说愿望」重新开始，而不是让玩家自己去找入口</summary>
     public void OnClickRebirth()
     {
         var gd = GameData.Instance;
@@ -863,6 +864,7 @@ public class UIManager : MonoBehaviour
         gd.ReviveAsEgg();
         CloseDeathPopup();
         ApplyEvolutionVisual();
+        if (hatchPanel != null) hatchPanel.Show();
     }
 
     // ---------------- 抚摸小鸡（任务17F-补丁） ----------------
