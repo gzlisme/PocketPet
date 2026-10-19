@@ -45,6 +45,7 @@ public class GameData : MonoBehaviour
     public int pityCount = 0;        // 连续未出「稀有及以上」的次数（保底计数）
     public string lastWish = "";     // 玩家说的愿望原文（破壳第一句话的原料，也进回忆录）
     public string firstLine = "";    // 它破壳后说的第一句话（出生即固定，一辈子不再变）
+    public string petName = "";      // 玩家起的名字（空 = 未起名，UI 显示回退物种名）
 
     // ---- 签到字段（阶段三任务14）----
     public long lastSignInDateTicks = 0; // 上次签到日的本地日期（当天 0 点，DateTime.Today.Ticks；0=从未签到）
@@ -347,6 +348,7 @@ public class GameData : MonoBehaviour
             pityCount = pityCount,
             lastWish = lastWish ?? "",
             firstLine = firstLine ?? "",
+            petName = petName ?? "",
         };
     }
 
@@ -541,6 +543,7 @@ public class GameData : MonoBehaviour
         pityCount = dto.pityCount;
         lastWish = dto.lastWish ?? "";
         firstLine = dto.firstLine ?? "";
+        petName = dto.petName ?? "";
         mood = Mathf.Min(100f, mood); // 任务17G：心情封顶 100（手改 JSON 写超了也不越界）
     }
 
@@ -623,6 +626,7 @@ public class GameData : MonoBehaviour
         speciesId = "";
         lastWish = "";
         firstLine = "";
+        petName = "";   // Loop7：名字属于上一只，新蛋由玩家重新起名
 
         Save();
     }
@@ -756,6 +760,30 @@ public class GameData : MonoBehaviour
             var def = PetSpecies.FindById(speciesId);
             return def != null ? def : PetSpecies.Default;
         }
+    }
+
+    /// <summary>
+    /// UI 显示用的宠物名：起了名用名字，没起名回退物种名。
+    /// 所有面向玩家的文案（飘字/弹窗/回忆录标题）一律从这里取，不硬编码「小鸡」。
+    /// 蛋阶段（speciesId 为空）显示「蛋」——它还是一颗蛋，没到有名字的时候。
+    /// </summary>
+    public string PetDisplayName
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(speciesId)) return "蛋";
+            return string.IsNullOrEmpty(petName) ? CurrentSpecies.displayName : petName;
+        }
+    }
+
+    /// <summary>给宠物起名/改名（空串 = 用回物种名）。立即存档——名字和第一句话一样，是身份的一部分</summary>
+    public void NamePet(string name)
+    {
+        petName = name != null ? name.Trim() : "";
+        AddMemory(string.IsNullOrEmpty(petName)
+            ? "它不再用名字了，就叫「" + CurrentSpecies.displayName + "」"
+            : "它有了名字：「" + petName + "」");
+        Save();
     }
 
     /// <summary>

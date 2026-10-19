@@ -425,7 +425,7 @@ public class UIManager : MonoBehaviour
         if (gd.mood >= GameData.MoodSoftCap)
         {
             if (yardFeedbackText != null) yardFeedbackText.text = "它现在开心得不得了";
-            SpawnFloatingText("小鸡乐开花", Color.white, 0f, 200f, 120f, 1.5f);
+            SpawnFloatingText(gd.PetDisplayName + "乐开花", Color.white, 0f, 200f, 120f, 1.5f);
             return;
         }
 
@@ -433,7 +433,7 @@ public class UIManager : MonoBehaviour
         if (!gd.TryConsumeYardToday())
         {
             if (yardFeedbackText != null) yardFeedbackText.text = "今天陪它玩够了，明天再来";
-            SpawnFloatingText("小鸡跑累啦", Color.white, 0f, 200f, 120f, 1.5f);
+            SpawnFloatingText(gd.PetDisplayName + "跑累啦", Color.white, 0f, 200f, 120f, 1.5f);
             return;
         }
 
@@ -443,7 +443,7 @@ public class UIManager : MonoBehaviour
         gd.AddYardCount(); // 任务15B：互动成功计数（成就系统）
         if (yardFeedbackText != null)
         {
-            yardFeedbackText.text = "逗鸡成功，小鸡很开心！"; // 2026-10-18：去掉成就进度后缀（21/10 越界显示太闹心）
+            yardFeedbackText.text = "逗它成功，" + gd.PetDisplayName + "很开心！"; // 2026-10-18：去掉成就进度后缀（21/10 越界显示太闹心）
             string msg = gd.ConsumeAchievementMessage(); // 任务15D：本次解锁的成就提示追加（取走即清空）
             if (!string.IsNullOrEmpty(msg)) yardFeedbackText.text += " · " + msg;
         }
@@ -845,7 +845,11 @@ public class UIManager : MonoBehaviour
     {
         if (deathPopup == null) return;
         CloseAllPanelsAndDrawer();
-        if (deathPopupText != null) deathPopupText.text = "小鸡走了…";
+        if (deathPopupText != null)
+        {
+            var gdDead = GameData.Instance;
+            deathPopupText.text = (gdDead != null ? gdDead.PetDisplayName : "它") + "走了…";
+        }
         deathPopup.SetActive(true);
     }
 
@@ -1087,7 +1091,7 @@ public class UIManager : MonoBehaviour
         {
             string[] mp = mem.Split(';');
             int fromMem = Mathf.Max(0, mp.Length - 8); // 只展示最近 8 条
-            text += "— 小鸡回忆录 —\n";
+            text += "— " + gd.PetDisplayName + "的回忆录 —\n";
             for (int i = mp.Length - 1; i >= fromMem; i--)
                 text += mp[i].Replace("|", " ") + "\n";
             text += "\n";

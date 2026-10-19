@@ -57,6 +57,7 @@ public class HatchPanel : MonoBehaviour
     private Text revealFirstLineText;   // 破壳第一句话（Loop 4 核心）
     private Text revealDescText;
     private Text revealWishText;
+    private InputField nameInput;       // Loop7：起名输入框（预填物种名，直接点按钮=用物种名）
 
     // ---- 运行数据 ----
     private string currentWish = "";
@@ -198,9 +199,30 @@ public class HatchPanel : MonoBehaviour
         revealWishText = UIFactory.CreateText(p, "WishEcho", "",
             new Vector2(760f, 120f), new Vector2(0f, -40f), 28, new Color(0.72f, 0.68f, 0.62f));
 
+        // Loop7：起名。就在「带它回家」上方——按下按钮前，它就该有名字了。
+        // 输入框预填物种名：不想起名的玩家直接点按钮，物种名就是名字。
+        UIFactory.CreateText(p, "NameHead", "给它起个名字：",
+            new Vector2(760f, 40f), new Vector2(0f, -150f), 26, new Color(0.58f, 0.54f, 0.50f));
+
+        nameInput = UIFactory.CreateInputField(p, "NameInput", "就叫它…",
+            new Vector2(560f, 90f), new Vector2(0f, -225f), 36, 12);
+
         UIFactory.CreateButton(p, "BtnDone", "带它回家",
-            new Vector2(620f, 130f), new Vector2(0f, -320f),
-            new Color(0.85f, 0.55f, 0.22f, 1f), Hide, 46, new Color(1f, 0.98f, 0.94f));
+            new Vector2(620f, 130f), new Vector2(0f, -360f),
+            new Color(0.85f, 0.55f, 0.22f, 1f), OnClickTakeHome, 46, new Color(1f, 0.98f, 0.94f));
+    }
+
+    /// <summary>「带它回家」：先落名（输入为空则用物种名），再关面板</summary>
+    private void OnClickTakeHome()
+    {
+        var gd = GameData.Instance;
+        if (gd != null)
+        {
+            string n = nameInput != null ? nameInput.text.Trim() : "";
+            if (string.IsNullOrEmpty(n)) n = result != null ? result.displayName : gd.CurrentSpecies.displayName;
+            if (n != gd.petName) gd.NamePet(n); // 名字没变就不刷回忆录/存档
+        }
+        Hide();
     }
 
     // ================= 显示 / 隐藏 =================
@@ -376,6 +398,14 @@ public class HatchPanel : MonoBehaviour
     private void ShowReveal()
     {
         if (result == null) result = PetSpecies.Default;
+
+        // 起名框回填：已有名字用名字，没起过用物种名（同一只每次打开都一致，不会乱跳）
+        if (nameInput != null)
+        {
+            var gdName = GameData.Instance;
+            string current = gdName != null ? gdName.petName : "";
+            nameInput.text = string.IsNullOrEmpty(current) ? result.displayName : current;
+        }
 
         // 愿望：本次会话用 currentWish，重新打开面板时回落到存档里的 lastWish
         string wish = currentWish;
