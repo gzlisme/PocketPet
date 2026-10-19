@@ -64,6 +64,8 @@ public class UIManager : MonoBehaviour
 
     // ---- 孵化系统（2026-10-19：纯代码创建，场景零改动）----
     private HatchPanel hatchPanel;       // 孵蛋面板（愿望输入 → 抽牌 → 破壳）
+    private Text petPlateText;           // Loop8：主界面左上名牌（名字 · 物种 · 稀有度）
+    private string lastPlateText;        // 名牌缓存（变了才刷，Update 里每帧只是字符串比较）
 
     // 假切换的背景色映射（任务4原样保留）
     private static readonly Color RoomYard    = new Color(76f / 255f, 175f / 255f, 80f / 255f);    // 院子 #4CAF50
@@ -113,10 +115,32 @@ public class UIManager : MonoBehaviour
         UIFactory.Font = feedFeedbackText != null ? feedFeedbackText.font : null;
         hatchPanel = HatchPanel.Create(transform);
         CreateHatchEntryButton();
+        CreatePetPlate();
 
         // 开局就是一颗蛋：直接把孵化面板推到玩家面前，让"它里面是什么"成为第一个问题。
         var gdStart = GameData.Instance;
         if (gdStart != null && gdStart.GetCurrentStage() == "蛋") hatchPanel.Show();
+    }
+
+    /// <summary>
+    /// Loop8：主界面左上名牌（纯代码，场景零改动）。
+    /// 位置与右上角孵蛋入口 (430,700) 对称，宽 440 不越出 1080 宽的 Canvas（左缘 -530 &gt; -540）。
+    /// 玩家起了名字，名字必须出现在最显眼的地方，否则起名等于白起。
+    /// </summary>
+    private void CreatePetPlate()
+    {
+        petPlateText = UIFactory.CreateText(transform, "PetPlate", "",
+            new Vector2(440f, 110f), new Vector2(-310f, 700f), 32, new Color(1f, 0.95f, 0.85f));
+    }
+
+    /// <summary>名牌文案：蛋阶段吊胃口；破壳后「名字 + 物种·稀有度」两行</summary>
+    private string ComputePetPlateText()
+    {
+        var gd = GameData.Instance;
+        if (gd == null) return "";
+        if (string.IsNullOrEmpty(gd.speciesId)) return "一颗蛋\n里面是什么呢？";
+        var sp = gd.CurrentSpecies;
+        return gd.PetDisplayName + "\n" + sp.displayName + " · " + PetSpecies.GetRarityName(sp.rarity);
     }
 
     /// <summary>
@@ -156,6 +180,15 @@ public class UIManager : MonoBehaviour
         // 任务11：阶段变化时才重设（避免每帧重设）；任务17G 起只比阶段（形态分化已删）
         var gd = GameData.Instance;
         if (gd == null || chickTr == null) return;
+
+        // Loop8：名牌检测——起名/孵化/领养都不会主动通知 UI，这里比对缓存字符串，
+        // 变了才刷（每帧成本 = 一次字符串比较，可忽略）
+        if (petPlateText != null)
+        {
+            string plate = ComputePetPlateText();
+            if (plate != lastPlateText) { petPlateText.text = plate; lastPlateText = plate; }
+        }
+
         string stage = gd.GetCurrentStage();
         if (stage == lastStage) return;
         if (lastStage != null && StageOrder(stage) > StageOrder(lastStage))
