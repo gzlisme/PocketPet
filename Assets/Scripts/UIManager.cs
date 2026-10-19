@@ -212,6 +212,14 @@ public class UIManager : MonoBehaviour
             if (plate != lastPlateText) { petPlateText.text = plate; lastPlateText = plate; }
         }
 
+        // Loop10：呼吸脉冲——每帧应用缩放。蛋幅度最大（里面是活的），长大趋于平稳。
+        // 放在阶段检测之前：死亡时上面已 return（死了就不呼吸了），活着就要一直动。
+        if (chickTr != null)
+        {
+            float k = 1f + chickBreatheAmp * Mathf.Sin(Time.time * 1.6f);
+            chickTr.localScale = new Vector3(chickBaseScale * k, chickBaseScale * k, 1f);
+        }
+
         string stage = gd.GetCurrentStage();
         if (stage == lastStage) return;
         if (lastStage != null && StageOrder(stage) > StageOrder(lastStage))
@@ -815,11 +823,17 @@ public class UIManager : MonoBehaviour
 
     // ---------------- 进化系统（阶段三任务11） ----------------
 
+    // Loop10：呼吸脉冲。ApplyEvolutionVisual 只定基准缩放与幅度，
+    // Update 每帧乘 (1 + amp·sin(t)) —— 蛋呼吸明显（里面是活的），长大后趋于平稳。
+    private float chickBaseScale = 0.6f;
+    private float chickBreatheAmp = 0.05f;
+
     /// <summary>
     /// 按阶段 + 物种设置游戏内形象（2026-10-19 改造：从"鸡"改为"任何孵出来的东西"）。
     /// 缩放 = 阶段基准 × 物种体型系数；颜色 = 物种主色（长大后略微提亮，保留"长大"的视觉反馈）。
     /// 蛋阶段固定白色、0.6 倍、隐藏装饰。
-    /// 只改 scale 与 color，不改位置 (0,0,0)，不改槽位局部参数。
+    /// Loop10 起缩放不再直接写 localScale：只更新 chickBaseScale / chickBreatheAmp，
+    /// 实际缩放由 Update 里的呼吸脉冲每帧应用。
     /// </summary>
     public void ApplyEvolutionVisual()
     {
@@ -834,7 +848,8 @@ public class UIManager : MonoBehaviour
 
         if (stage == "蛋")
         {
-            chickTr.localScale = new Vector3(0.6f, 0.6f, 1f);
+            chickBaseScale = 0.6f;
+            chickBreatheAmp = 0.05f; // 蛋呼吸最明显：让玩家一眼看出「里面活着什么」
             chickSr.color = new Color(1f, 1f, 1f);                 // #FFFFFF：蛋还没被决定是什么
             HideDeco(slotHat); HideDeco(slotScarf); HideDeco(slotGlasses);
             return;
@@ -851,8 +866,9 @@ public class UIManager : MonoBehaviour
         }
 
         var def = gd.CurrentSpecies;
-        float s = stageBase * def.sizeScale;
-        chickTr.localScale = new Vector3(s, s, 1f);
+        chickBaseScale = stageBase * def.sizeScale;
+        // 越小呼吸幅度越大：幼年体好动，成年体沉稳
+        chickBreatheAmp = stage == "幼年" ? 0.03f : stage == "少年" ? 0.025f : 0.02f;
         chickSr.color = Color.Lerp(def.bodyColor, Color.white, lift);
         RefreshChickDecoration();
     }
