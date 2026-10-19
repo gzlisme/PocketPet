@@ -87,4 +87,5 @@ public class SaveData
     public int hatchCount = 0;                     // 累计孵化次数（图鉴/统计用）
     public int pityCount = 0;                      // 连续未出「稀有及以上」的次数（保底计数，出稀有即归零）
     public string lastWish = "";                   // 玩家对它说的愿望原文（破壳第一句话的原料）
+    public string firstLine = "";                  // 它破壳后说的第一句话（出生即固定，一辈子不再变）
 }

@@ -44,6 +44,7 @@ public class GameData : MonoBehaviour
     public int hatchCount = 0;       // 累计孵化次数
     public int pityCount = 0;        // 连续未出「稀有及以上」的次数（保底计数）
     public string lastWish = "";     // 玩家说的愿望原文（破壳第一句话的原料，也进回忆录）
+    public string firstLine = "";    // 它破壳后说的第一句话（出生即固定，一辈子不再变）
 
     // ---- 签到字段（阶段三任务14）----
     public long lastSignInDateTicks = 0; // 上次签到日的本地日期（当天 0 点，DateTime.Today.Ticks；0=从未签到）
@@ -345,6 +346,7 @@ public class GameData : MonoBehaviour
             hatchCount = hatchCount,
             pityCount = pityCount,
             lastWish = lastWish ?? "",
+            firstLine = firstLine ?? "",
         };
     }
 
@@ -538,6 +540,7 @@ public class GameData : MonoBehaviour
         hatchCount = dto.hatchCount;
         pityCount = dto.pityCount;
         lastWish = dto.lastWish ?? "";
+        firstLine = dto.firstLine ?? "";
         mood = Mathf.Min(100f, mood); // 任务17G：心情封顶 100（手改 JSON 写超了也不越界）
     }
 
@@ -719,14 +722,17 @@ public class GameData : MonoBehaviour
         return Mathf.Max(0, (int)day);
     }
 
-    /// <summary>成长阶段：Day0 蛋 / Day1~2 幼鸡 / Day3~6 少年鸡 / Day7+ 成年鸡</summary>
+    /// <summary>
+    /// 成长阶段：Day0 蛋 / Day1~2 幼年 / Day3~6 少年 / Day7+ 成年。
+    /// 2026-10-19：去掉"鸡"字 —— 孵出来的不一定是鸡，阶段名必须是物种无关的。
+    /// </summary>
     public string GetCurrentStage()
     {
         int day = GetCurrentDay();
         if (day <= 0) return "蛋";
-        if (day <= 2) return "幼鸡";
-        if (day <= 6) return "少年鸡";
-        return "成年鸡";
+        if (day <= 2) return "幼年";
+        if (day <= 6) return "少年";
+        return "成年";
     }
 
     // ---------------- 孵化（2026-10-19） ----------------
@@ -768,6 +774,9 @@ public class GameData : MonoBehaviour
         // 保底计数：出了「稀有及以上」就归零，否则继续累加
         pityCount = (chosen.rarity >= PetSpecies.RarityRare) ? 0 : pityCount + 1;
         lastWish = wish != null ? wish.Trim() : "";
+
+        // 第一句话在孵化这一瞬间定下来，写进存档 —— 它是出生证明，不是每次都重掷的随机数
+        firstLine = PetVoice.FirstLine(chosen, lastWish);
 
         AddMemory("从蛋里孵出了一只「" + chosen.displayName + "」（" + PetSpecies.GetRarityName(chosen.rarity) + "）");
         Save();

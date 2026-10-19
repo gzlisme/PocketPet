@@ -392,11 +392,24 @@ public class HatchPanel : MonoBehaviour
             revealNameText.color = PetSpecies.GetRarityColor(result.rarity);
         }
 
-        // 第一句话：只在第一次进揭晓时生成一次，本会话内不再变（避免来回打开时台词乱跳）
+        // 第一句话：优先用存档里出生那一刻定下的那句（一辈子不变）；
+        // 只有老存档没有 firstLine 时才现场补一句，并立刻回写，避免下次又变。
         if (revealFirstLineText != null)
         {
+            var gdNow = GameData.Instance;
             if (string.IsNullOrEmpty(cachedFirstLine))
-                cachedFirstLine = PetVoice.FirstLine(result, wish);
+            {
+                if (gdNow != null && !string.IsNullOrEmpty(gdNow.firstLine))
+                    cachedFirstLine = gdNow.firstLine;
+                else
+                    cachedFirstLine = PetVoice.FirstLine(result, wish);
+
+                if (gdNow != null && string.IsNullOrEmpty(gdNow.firstLine))
+                {
+                    gdNow.firstLine = cachedFirstLine;
+                    gdNow.Save();
+                }
+            }
             revealFirstLineText.text = "「" + cachedFirstLine + "」";
         }
 

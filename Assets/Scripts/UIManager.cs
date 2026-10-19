@@ -759,8 +759,9 @@ public class UIManager : MonoBehaviour
     // ---------------- 进化系统（阶段三任务11） ----------------
 
     /// <summary>
-    /// 按 GameData 阶段设置小鸡大小与颜色（任务11.4；17G 起成年鸡固定金色、不再分形态）：
-    /// 蛋=0.6 白+隐藏装饰 / 幼鸡=0.8 / 少年鸡=1.0 / 成年鸡=1.2 固定金 #FFD700。
+    /// 按阶段 + 物种设置游戏内形象（2026-10-19 改造：从"鸡"改为"任何孵出来的东西"）。
+    /// 缩放 = 阶段基准 × 物种体型系数；颜色 = 物种主色（长大后略微提亮，保留"长大"的视觉反馈）。
+    /// 蛋阶段固定白色、0.6 倍、隐藏装饰。
     /// 只改 scale 与 color，不改位置 (0,0,0)，不改槽位局部参数。
     /// </summary>
     public void ApplyEvolutionVisual()
@@ -771,32 +772,32 @@ public class UIManager : MonoBehaviour
 
         // 任务11.6：阶段变化 Console 提示（首次初始化不算变化，不输出）
         if (lastStage != null && lastStage != stage)
-            Debug.Log("[PocketPet] 进化：" + lastStage + " → " + stage);
+            Debug.Log("[PocketPet] 成长：" + lastStage + " → " + stage);
         lastStage = stage;
 
+        if (stage == "蛋")
+        {
+            chickTr.localScale = new Vector3(0.6f, 0.6f, 1f);
+            chickSr.color = new Color(1f, 1f, 1f);                 // #FFFFFF：蛋还没被决定是什么
+            HideDeco(slotHat); HideDeco(slotScarf); HideDeco(slotGlasses);
+            return;
+        }
+
+        // 阶段基准 × 物种体型：同样是"成年"，小鸮就是比小羊小一圈
+        float stageBase;
+        float lift; // 长大后向白色提亮的比例，作为"长大了"的视觉信号
         switch (stage)
         {
-            case "蛋":
-                chickTr.localScale = new Vector3(0.6f, 0.6f, 1f);
-                chickSr.color = new Color(1f, 1f, 1f);                 // #FFFFFF
-                HideDeco(slotHat); HideDeco(slotScarf); HideDeco(slotGlasses);
-                break;
-            case "幼鸡":
-                chickTr.localScale = new Vector3(0.8f, 0.8f, 1f);
-                chickSr.color = new Color(1f, 215f / 255f, 0f);       // #FFD700
-                RefreshChickDecoration();
-                break;
-            case "少年鸡":
-                chickTr.localScale = new Vector3(1f, 1f, 1f);
-                chickSr.color = new Color(1f, 215f / 255f, 0f);       // #FFD700
-                RefreshChickDecoration();
-                break;
-            default: // 成年鸡
-                chickTr.localScale = new Vector3(1.2f, 1.2f, 1f);
-                chickSr.color = new Color(1f, 215f / 255f, 0f); // 固定金色 #FFD700（任务17G：形态分化已删）
-                RefreshChickDecoration();
-                break;
+            case "幼年": stageBase = 0.8f; lift = 0f;    break;
+            case "少年": stageBase = 1.0f; lift = 0.06f; break;
+            default:     stageBase = 1.2f; lift = 0.14f; break;
         }
+
+        var def = gd.CurrentSpecies;
+        float s = stageBase * def.sizeScale;
+        chickTr.localScale = new Vector3(s, s, 1f);
+        chickSr.color = Color.Lerp(def.bodyColor, Color.white, lift);
+        RefreshChickDecoration();
     }
 
     /// <summary>隐藏单个装饰（蛋阶段用）</summary>
@@ -813,7 +814,7 @@ public class UIManager : MonoBehaviour
     {
         if (evolutionPopup == null) return;
         evolutionPopup.SetActive(true);
-        if (popupText != null) popupText.text = "进化了！\n" + fromStage + " → " + toStage;
+        if (popupText != null) popupText.text = "它长大了\n" + fromStage + " → " + toStage;
         CloseAllPanelsAndDrawer();
         popupShownAt = Time.time;
     }
@@ -824,15 +825,15 @@ public class UIManager : MonoBehaviour
         if (evolutionPopup != null) evolutionPopup.SetActive(false);
     }
 
-    /// <summary>阶段序：蛋 0 &lt; 幼鸡 1 &lt; 少年鸡 2 &lt; 成年鸡 3（未知 -1）——只升不退才弹窗</summary>
+    /// <summary>阶段序：蛋 0 &lt; 幼年 1 &lt; 少年 2 &lt; 成年 3（未知 -1）——只升不退才弹窗</summary>
     private static int StageOrder(string stage)
     {
         switch (stage)
         {
             case "蛋": return 0;
-            case "幼鸡": return 1;
-            case "少年鸡": return 2;
-            case "成年鸡": return 3;
+            case "幼年": return 1;
+            case "少年": return 2;
+            case "成年": return 3;
             default: return -1;
         }
     }
