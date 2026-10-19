@@ -64,6 +64,7 @@ public class UIManager : MonoBehaviour
 
     // ---- 孵化系统（2026-10-19：纯代码创建，场景零改动）----
     private HatchPanel hatchPanel;       // 孵蛋面板（愿望输入 → 抽牌 → 破壳）
+    private CodexPanel codexPanel;       // Loop9：图鉴面板（16 物种，未孵出的显示？？？）
     private Text petPlateText;           // Loop8：主界面左上名牌（名字 · 物种 · 稀有度）
     private string lastPlateText;        // 名牌缓存（变了才刷，Update 里每帧只是字符串比较）
 
@@ -114,7 +115,9 @@ public class UIManager : MonoBehaviour
         // 保证中文表现与现有界面完全一致（项目没有自定义字体资源）。
         UIFactory.Font = feedFeedbackText != null ? feedFeedbackText.font : null;
         hatchPanel = HatchPanel.Create(transform);
+        codexPanel = CodexPanel.Create(transform);
         CreateHatchEntryButton();
+        CreateCodexEntryButton();
         CreatePetPlate();
 
         // 开局就是一颗蛋：直接把孵化面板推到玩家面前，让"它里面是什么"成为第一个问题。
@@ -153,6 +156,26 @@ public class UIManager : MonoBehaviour
             new Vector2(140f, 140f), new Vector2(430f, 700f),
             new Color(0.85f, 0.55f, 0.22f, 0.92f), OnClickHatchEntry, 34,
             new Color(1f, 0.98f, 0.94f));
+    }
+
+    /// <summary>
+    /// Loop9：图鉴入口，挂在孵蛋按钮正下方 (430,540)，两个入口形成右侧「孵化区」。
+    /// 与孵蛋按钮同色系但更深一档，视觉上是一组的从属关系。
+    /// </summary>
+    private void CreateCodexEntryButton()
+    {
+        UIFactory.CreateButton(transform, "BtnCodexEntry", "图鉴",
+            new Vector2(140f, 120f), new Vector2(430f, 540f),
+            new Color(0.55f, 0.40f, 0.24f, 0.92f), OnClickCodexEntry, 34,
+            new Color(1f, 0.98f, 0.94f));
+    }
+
+    /// <summary>点击图鉴入口：关掉其他面板，打开图鉴</summary>
+    public void OnClickCodexEntry()
+    {
+        if (GameData.Instance != null && GameData.Instance.isDead) return; // 死亡期间禁止互动
+        CloseAllPanelsAndDrawer();
+        if (codexPanel != null) codexPanel.Show();
     }
 
     /// <summary>点击悬浮「孵蛋」入口：关掉其他面板，打开孵化面板</summary>
@@ -231,6 +254,7 @@ public class UIManager : MonoBehaviour
         CloseAchievementPanel(); // 任务15C：开其他面板/开抽屉时成就面板一并关闭
         CloseDiaryPanel();       // 任务16B：开其他面板/开抽屉时碎碎念面板一并关闭
         if (hatchPanel != null) hatchPanel.Hide(); // 孵化系统：与其余面板互斥
+        if (codexPanel != null) codexPanel.Hide(); // Loop9：图鉴与其余面板互斥
     }
 
     /// <summary>Bug-3 修复：打开任一房间面板前统一调用——关闭全部五个功能面板，并关抽屉（DrawerPanel 置不激活 + 隐藏抽屉外透明点击区，复用 CloseDrawer 任务6语义）</summary>

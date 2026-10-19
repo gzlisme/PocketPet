@@ -89,4 +89,5 @@ public class SaveData
     public string lastWish = "";                   // 玩家对它说的愿望原文（破壳第一句话的原料）
     public string firstLine = "";                  // 它破壳后说的第一句话（出生即固定，一辈子不再变）
     public string petName = "";                    // 玩家起的名字（空 = 未起名，显示时回退物种名）
+    public string discoveredSpecies = "";          // 图鉴：已孵出过的物种 id，逗号分隔（跨代累计，不随死亡清空）
 }

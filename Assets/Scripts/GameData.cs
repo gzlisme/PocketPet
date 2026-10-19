@@ -46,6 +46,7 @@ public class GameData : MonoBehaviour
     public string lastWish = "";     // 玩家说的愿望原文（破壳第一句话的原料，也进回忆录）
     public string firstLine = "";    // 它破壳后说的第一句话（出生即固定，一辈子不再变）
     public string petName = "";      // 玩家起的名字（空 = 未起名，UI 显示回退物种名）
+    public string discoveredSpecies = ""; // 图鉴：已孵出过的物种 id，逗号分隔（跨代累计，不随死亡清空）
 
     // ---- 签到字段（阶段三任务14）----
     public long lastSignInDateTicks = 0; // 上次签到日的本地日期（当天 0 点，DateTime.Today.Ticks；0=从未签到）
@@ -349,6 +350,7 @@ public class GameData : MonoBehaviour
             lastWish = lastWish ?? "",
             firstLine = firstLine ?? "",
             petName = petName ?? "",
+            discoveredSpecies = discoveredSpecies ?? "",
         };
     }
 
@@ -544,6 +546,7 @@ public class GameData : MonoBehaviour
         lastWish = dto.lastWish ?? "";
         firstLine = dto.firstLine ?? "";
         petName = dto.petName ?? "";
+        discoveredSpecies = dto.discoveredSpecies ?? "";
         mood = Mathf.Min(100f, mood); // 任务17G：心情封顶 100（手改 JSON 写超了也不越界）
     }
 
@@ -776,6 +779,23 @@ public class GameData : MonoBehaviour
         }
     }
 
+    /// <summary>图鉴：这个物种孵出过吗（discoveredSpecies 为逗号分隔 id 串）</summary>
+    public bool HasDiscovered(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return false;
+        // 前后加逗号再查，避免 "owl" 匹配到 "snowowl" 之类的子串误中
+        return ("," + discoveredSpecies + ",").Contains("," + id + ",");
+    }
+
+    /// <summary>图鉴：记录一次遇见（第一次遇见时记进回忆录）</summary>
+    private void RecordDiscovery(string id, string displayName, int rarity)
+    {
+        if (string.IsNullOrEmpty(id) || HasDiscovered(id)) return;
+        discoveredSpecies = string.IsNullOrEmpty(discoveredSpecies) ? id : discoveredSpecies + "," + id;
+        if (rarity >= PetSpecies.RarityRare)
+            AddMemory("第一次遇见了「" + displayName + "」（" + PetSpecies.GetRarityName(rarity) + "）");
+    }
+
     /// <summary>给宠物起名/改名（空串 = 用回物种名）。立即存档——名字和第一句话一样，是身份的一部分</summary>
     public void NamePet(string name)
     {
@@ -815,6 +835,7 @@ public class GameData : MonoBehaviour
         firstLine = PetVoice.FirstLine(chosen, lastWish);
 
         AddMemory("从蛋里孵出了一只「" + chosen.displayName + "」（" + PetSpecies.GetRarityName(chosen.rarity) + "）");
+        RecordDiscovery(chosen.id, chosen.displayName, chosen.rarity); // Loop9：图鉴记录遇见
         Save();
         return chosen;
     }
