@@ -90,4 +90,12 @@ public class SaveData
     public string firstLine = "";                  // 它破壳后说的第一句话（出生即固定，一辈子不再变）
     public string petName = "";                    // 玩家起的名字（空 = 未起名，显示时回退物种名）
     public string discoveredSpecies = "";          // 图鉴：已孵出过的物种 id，逗号分隔（跨代累计，不随死亡清空）
+
+    // ---- 投蛋材料（2026-10-19 天材地宝 · 任务1）----
+    /// <summary>
+    /// 材料库存："id:数量,..."（如 "moon_shard:2,star_marrow:1"）。
+    /// 默认值 = 开局赠送；老档缺该字段时由 FromJsonOverwrite 语义自动补发同一份。
+    /// 玩家用光后存成 ""，不会重新补发（键已存在，值就是空串）。
+    /// </summary>
+    public string materialInventory = PetMaterial.DefaultInventory;
 }

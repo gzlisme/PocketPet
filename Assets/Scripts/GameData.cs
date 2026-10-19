@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 
@@ -47,6 +48,7 @@ public class GameData : MonoBehaviour
     public string firstLine = "";    // 它破壳后说的第一句话（出生即固定，一辈子不再变）
     public string petName = "";      // 玩家起的名字（空 = 未起名，UI 显示回退物种名）
     public string discoveredSpecies = ""; // 图鉴：已孵出过的物种 id，逗号分隔（跨代累计，不随死亡清空）
+    public string materialInventory = PetMaterial.DefaultInventory; // 投蛋材料库存："id:数量,..."（任务1，三层同步字段）
 
     // ---- 签到字段（阶段三任务14）----
     public long lastSignInDateTicks = 0; // 上次签到日的本地日期（当天 0 点，DateTime.Today.Ticks；0=从未签到）
@@ -351,6 +353,7 @@ public class GameData : MonoBehaviour
             firstLine = firstLine ?? "",
             petName = petName ?? "",
             discoveredSpecies = discoveredSpecies ?? "",
+            materialInventory = materialInventory ?? "",
         };
     }
 
@@ -547,6 +550,7 @@ public class GameData : MonoBehaviour
         firstLine = dto.firstLine ?? "";
         petName = dto.petName ?? "";
         discoveredSpecies = dto.discoveredSpecies ?? "";
+        materialInventory = dto.materialInventory ?? "";
         mood = Mathf.Min(100f, mood); // 任务17G：心情封顶 100（手改 JSON 写超了也不越界）
     }
 
@@ -838,6 +842,72 @@ public class GameData : MonoBehaviour
         RecordDiscovery(chosen.id, chosen.displayName, chosen.rarity); // Loop9：图鉴记录遇见
         Save();
         return chosen;
+    }
+
+    // ---------------- 投蛋材料（2026-10-19 天材地宝 · 任务1）----------------
+
+    /// <summary>某材料当前库存（0 = 没有；未知 id 一律 0）</summary>
+    public int GetMaterialCount(string materialId)
+    {
+        if (string.IsNullOrEmpty(materialId)) return 0;
+        int count;
+        return PetMaterial.ParseInventory(materialInventory).TryGetValue(materialId, out count) ? count : 0;
+    }
+
+    /// <summary>获得材料并立即存档（后续接商店 / 活动掉落时统一走这里，别在外面手拼 materialInventory 字符串）</summary>
+    public void AddMaterial(string materialId, int count)
+    {
+        var mat = PetMaterial.FindById(materialId);
+        if (mat == null || count <= 0) return;
+        var inv = PetMaterial.ParseInventory(materialInventory);
+        inv[mat.id] = (inv.ContainsKey(mat.id) ? inv[mat.id] : 0) + count;
+        materialInventory = PetMaterial.BuildInventory(inv);
+        Save();
+    }
+
+    /// <summary>
+    /// 按投入列表扣除材料：先整体核对（含多个格子叠投同类的重复计数），任何一个不够就整单不扣、返回 false。
+    /// 扣成后不存档 —— 落孵路径里紧跟一次 Save，让扣料与孵化在同一份存档里落盘，不会出现错账。
+    /// </summary>
+    private bool TryConsumeMaterials(List<PetMaterial> materials)
+    {
+        if (materials == null || materials.Count == 0) return true;
+
+        var need = new Dictionary<string, int>();
+        foreach (var m in materials)
+        {
+            if (m == null) continue;
+            need[m.id] = (need.ContainsKey(m.id) ? need[m.id] : 0) + 1;
+        }
+
+        var inv = PetMaterial.ParseInventory(materialInventory);
+        foreach (var kv in need)
+        {
+            int have;
+            if (!inv.TryGetValue(kv.Key, out have) || have < kv.Value) return false;
+        }
+        foreach (var kv in need) inv[kv.Key] -= kv.Value;
+        materialInventory = PetMaterial.BuildInventory(inv);
+        return true;
+    }
+
+    /// <summary>
+    /// 带材料的落孵（任务1）：扣库存 → 扣成才记一笔回忆录 → 走原落孵（原方法内部的 Save 会把扣完的库存一并落盘）。
+    /// 库存不足时当没投过（不扣、不记、照孵）——正常流程 UI 已校验过库存，这里是手改档 / 异常时的兜底，
+    /// 不让"差一个材料"卡死孵化主流程，也绝不让回忆录记一笔没发生的投入。
+    /// </summary>
+    public PetSpecies.Def HatchSpeciesWith(PetSpecies.Def chosen, string wish, List<PetMaterial> investedMaterials)
+    {
+        bool consumed = TryConsumeMaterials(investedMaterials);
+        if (consumed && investedMaterials != null && investedMaterials.Count > 0)
+        {
+            var names = new List<string>();
+            foreach (var m in investedMaterials)
+                if (m != null) names.Add(m.displayName);
+            if (names.Count > 0)
+                AddMemory("往蛋里放了「" + string.Join("、", names.ToArray()) + "」");
+        }
+        return HatchSpeciesWith(chosen, wish);
     }
 
     /// <summary>当前宠物的显示名（UI 用，永远非空）</summary>

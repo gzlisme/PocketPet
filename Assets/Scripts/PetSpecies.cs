@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -209,5 +210,107 @@ public static class PetSpecies
         }
 
         return Default; // 理论不可达：兜底
+    }
+
+    // ---------------- 投蛋加权抽取（2026-10-19 天材地宝 · 任务1）----------------
+
+    /// <summary>定系材料的系别权重倍数：一个 ×4，同系叠投相乘（三个同类 = ×64，几乎锁定该系）</summary>
+    public const int MaterialFamilyBoost = 4;
+
+    /// <summary>
+    /// 带材料的抽取（任务1）：定系材料把对应系权重乘上去，贵重物改写稀有度权重并封上限。
+    /// materials 为空 / null 时直接走原始 Roll —— 验收标准：不投材料时概率与现状完全一致。
+    /// 保底逻辑照旧生效；贵重物的上限对保底结果同样生效（保底掷出传说但上限是稀有 → 出稀有）。
+    /// </summary>
+    public static Def Roll(int pityCount, List<PetMaterial> materials)
+    {
+        if (materials == null || materials.Count == 0) return Roll(pityCount);
+
+        // ---- 贵重物：取上限最高的一件生效，不叠加 ----
+        int cap = RarityLegend;
+        int[] weights = RarityWeights;
+        PetMaterial bestTreasure = null;
+        for (int i = 0; i < materials.Count; i++)
+        {
+            var m = materials[i];
+            if (m == null || !m.IsTreasure) continue;
+            if (bestTreasure == null || m.rarityCap > bestTreasure.rarityCap) bestTreasure = m;
+        }
+        if (bestTreasure != null)
+        {
+            cap = bestTreasure.rarityCap;
+            weights = bestTreasure.rarityWeights != null ? bestTreasure.rarityWeights : RarityWeights;
+        }
+
+        // ---- 定系倍数：同系叠投相乘 ----
+        var familyMult = new Dictionary<string, float>();
+        for (int i = 0; i < materials.Count; i++)
+        {
+            var m = materials[i];
+            if (m == null || m.IsTreasure) continue;
+            float cur = familyMult.ContainsKey(m.family) ? familyMult[m.family] : 1f;
+            familyMult[m.family] = cur * MaterialFamilyBoost;
+        }
+
+        int rarity = RollRarity(pityCount, weights);
+        if (rarity > cap) rarity = cap; // 上限对随机结果与保底结果一视同仁
+
+        // 在稀有度内按系别倍数加权挑选；该档没有物种时向下回退（与原始 Roll 同思路）
+        for (int want = rarity; want >= RarityCommon; want--)
+        {
+            Def picked = PickWeighted(want, familyMult);
+            if (picked != null) return picked;
+        }
+        return Default; // 理论不可达：兜底
+    }
+
+    /// <summary>加权版稀有度掷骰：权重数组可被贵重物替换，保底分支与原版一致</summary>
+    private static int RollRarity(int pityCount, int[] weights)
+    {
+        if (pityCount >= PityThreshold)
+            return Random.value < PityLegendChance ? RarityLegend : RarityRare;
+
+        int total = 0;
+        for (int i = 0; i < weights.Length; i++) total += weights[i];
+        if (total <= 0) return RarityCommon;
+
+        int r = Random.Range(0, total);
+        int acc = 0;
+        for (int i = 0; i < weights.Length; i++)
+        {
+            acc += weights[i];
+            if (r < acc) return i;
+        }
+        return RarityCommon;
+    }
+
+    /// <summary>在指定稀有度内按系别倍数加权挑一个物种；该稀有度没有物种返回 null</summary>
+    private static Def PickWeighted(int rarity, Dictionary<string, float> familyMult)
+    {
+        float total = 0f;
+        for (int i = 0; i < All.Length; i++)
+        {
+            if (All[i].rarity != rarity) continue;
+            total += WeightOf(All[i], familyMult);
+        }
+        if (total <= 0f) return null;
+
+        float r = Random.Range(0f, total);
+        float acc = 0f;
+        for (int i = 0; i < All.Length; i++)
+        {
+            if (All[i].rarity != rarity) continue;
+            acc += WeightOf(All[i], familyMult);
+            if (r < acc) return All[i];
+        }
+        return null;
+    }
+
+    /// <summary>物种的抽取权重：命中的系吃倍数，未命中 = 1（与不投材料时的档内等概率一致）</summary>
+    private static float WeightOf(Def def, Dictionary<string, float> familyMult)
+    {
+        float mult;
+        if (familyMult != null && familyMult.TryGetValue(def.family, out mult)) return mult;
+        return 1f;
     }
 }

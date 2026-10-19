@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -14,8 +15,9 @@ using UnityEngine.UI;
 /// 现在的做法里，那 9 张没被选中的确实存在过 —— 它们是「未出生的兄弟姐妹」，
 /// 后面可以做稀有事件让它们回来见一面，一分钱不花。
 ///
-/// 全部 UI 纯代码创建，场景结构零改动（理由见 UIFactory 类注释）。
-/// </summary>
+    /// 愿望阶段还可以往蛋里塞「天材地宝」（≤3 个材料：定系材料偏系、贵重物定稀有度上限，任务1）。
+    /// 全部 UI 纯代码创建，场景结构零改动（理由见 UIFactory 类注释）。
+    /// </summary>
 public class HatchPanel : MonoBehaviour
 {
     public const int WishMinLength = 10;
@@ -45,6 +47,17 @@ public class HatchPanel : MonoBehaviour
     private Text countText;
     private Text feedbackText;
 
+    // ---- 愿望阶段：投蛋材料（2026-10-19 天材地宝 · 任务1）----
+    private const int MaterialSlotCount = 3;
+    private const float MaterialSlotW = 250f;
+    private const float MaterialSlotGap = 260f;
+    private static readonly Color SlotEmptyColor = new Color(0.24f, 0.22f, 0.20f, 1f);
+    private static readonly Color SlotEmptyLabelColor = new Color(0.62f, 0.57f, 0.50f, 0.9f);
+    private readonly Button[] materialSlots = new Button[MaterialSlotCount];
+    private readonly Text[] materialSlotLabels = new Text[MaterialSlotCount];
+    private readonly string[] materialSlotIds = new string[MaterialSlotCount]; // 本格选中的材料 id（""/null = 空格）
+    private Text materialHintText;
+
     // ---- 抽牌阶段 ----
     private readonly Button[] cards = new Button[CardCount];
     private readonly Text[] cardLabels = new Text[CardCount];
@@ -61,6 +74,7 @@ public class HatchPanel : MonoBehaviour
 
     // ---- 运行数据 ----
     private string currentWish = "";
+    private readonly List<PetMaterial> investedMaterials = new List<PetMaterial>(); // 进抽牌页那一刻锁定的投入材料（任务1）
     private string cachedFirstLine = "";   // 本会话内固定的第一句话（Loop 5 改为持久化）
     private PetSpecies.Def result;
 
@@ -116,23 +130,43 @@ public class HatchPanel : MonoBehaviour
 
         wishInput = UIFactory.CreateInputField(p, "WishInput",
             "比如：我想要一只不太爱说话、但会一直陪着我的小家伙……",
-            new Vector2(800f, 280f), new Vector2(0f, 160f), 34, WishMaxLength);
+            new Vector2(800f, 220f), new Vector2(0f, 190f), 34, WishMaxLength);
         wishInput.onValueChanged.AddListener(OnWishChanged);
 
         countText = UIFactory.CreateText(p, "CountText", "0 / " + WishMaxLength,
-            new Vector2(400f, 44f), new Vector2(300f, -12f), 28,
+            new Vector2(400f, 44f), new Vector2(300f, 52f), 28,
             new Color(0.7f, 0.65f, 0.6f), TextAnchor.MiddleRight);
 
+        // ---- 天材地宝：3 个材料格（任务1）。点一下循环换：空 → 各材料（跳过没库存的）→ 空 ----
+        UIFactory.CreateText(p, "MatLabel", "天材地宝（可投 3 个，不投也行）",
+            new Vector2(820f, 44f), new Vector2(0f, 0f), 30, new Color(1f, 0.88f, 0.7f));
+
+        for (int i = 0; i < MaterialSlotCount; i++)
+        {
+            int captured = i; // 闭包捕获：不捕获会全部指向最后一个 i
+            float x = (i - (MaterialSlotCount - 1) * 0.5f) * MaterialSlotGap;
+            var btn = UIFactory.CreateButton(p, "MatSlot" + i, "＋",
+                new Vector2(MaterialSlotW, 96f), new Vector2(x, -78f),
+                SlotEmptyColor, () => CycleMaterialSlot(captured), 36, SlotEmptyLabelColor);
+            materialSlots[i] = btn;
+            materialSlotLabels[i] = btn.GetComponentInChildren<Text>();
+        }
+
+        materialHintText = UIFactory.CreateText(p, "MatHint", "不投也行，全看缘分",
+            new Vector2(820f, 44f), new Vector2(0f, -165f), 26, new Color(0.72f, 0.66f, 0.6f));
+
         feedbackText = UIFactory.CreateText(p, "Feedback", "",
-            new Vector2(800f, 56f), new Vector2(0f, -72f), 30, new Color(1f, 0.8f, 0.5f));
+            new Vector2(800f, 56f), new Vector2(0f, -228f), 30, new Color(1f, 0.8f, 0.5f));
 
         UIFactory.CreateButton(p, "BtnHatch", "说好了",
-            new Vector2(620f, 130f), new Vector2(0f, -200f),
+            new Vector2(620f, 130f), new Vector2(0f, -330f),
             new Color(0.85f, 0.55f, 0.22f, 1f), OnClickToPicking, 46, new Color(1f, 0.98f, 0.94f));
 
         UIFactory.CreateButton(p, "BtnClose", "先看看别处",
-            new Vector2(420f, 92f), new Vector2(0f, -350f),
+            new Vector2(420f, 92f), new Vector2(0f, -470f),
             new Color(0.32f, 0.3f, 0.28f, 1f), Hide, 34, new Color(0.85f, 0.82f, 0.78f));
+
+        RefreshMaterialSlots();
     }
 
     // ---------------- 阶段二：抽牌 ----------------
@@ -243,6 +277,8 @@ public class HatchPanel : MonoBehaviour
         }
 
         SetPhase(Phase.Wish);
+        for (int i = 0; i < MaterialSlotCount; i++) materialSlotIds[i] = ""; // 重开面板：材料选择清空，按最新库存重刷
+        RefreshMaterialSlots();
         RefreshCount();
     }
 
@@ -290,10 +326,135 @@ public class HatchPanel : MonoBehaviour
         }
 
         currentWish = wish;
+
+        // ---- 组装投入材料并核对库存（正常流程选格子时已过滤，这里是手改档 / 边界兜底）----
+        investedMaterials.Clear();
+        var need = new Dictionary<string, int>();
+        for (int i = 0; i < MaterialSlotCount; i++)
+        {
+            var m = PetMaterial.FindById(materialSlotIds[i]);
+            if (m == null) continue;
+            investedMaterials.Add(m);
+            need[m.id] = (need.ContainsKey(m.id) ? need[m.id] : 0) + 1;
+        }
+        var gdMat = GameData.Instance;
+        if (gdMat != null)
+        {
+            foreach (var kv in need)
+            {
+                if (gdMat.GetMaterialCount(kv.Key) >= kv.Value) continue;
+                var lack = PetMaterial.FindById(kv.Key);
+                if (feedbackText != null)
+                    feedbackText.text = "「" + (lack != null ? lack.displayName : kv.Key) + "」不够了，换个材料或空着格子吧";
+                investedMaterials.Clear();
+                return;
+            }
+        }
+
         RollCandidates();
         ResetCards();
         pickingLocked = false;
         SetPhase(Phase.Picking);
+    }
+
+    // ---------------- 投蛋材料交互（任务1）----------------
+
+    /// <summary>点一下格子循环换材料：空 → 库存还有的材料（按 PetMaterial.All 顺序）→ 空。没库存的自动跳过。</summary>
+    private void CycleMaterialSlot(int index)
+    {
+        int start = 0;
+        string current = materialSlotIds[index];
+        if (!string.IsNullOrEmpty(current))
+        {
+            for (int i = 0; i < PetMaterial.All.Length; i++)
+                if (PetMaterial.All[i].id == current) { start = i + 1; break; }
+        }
+
+        for (int k = 0; k <= PetMaterial.All.Length; k++)
+        {
+            int i = start + k;
+            if (i >= PetMaterial.All.Length) { materialSlotIds[index] = ""; break; } // 绕完一圈：回到空格
+
+            var m = PetMaterial.All[i];
+            if (GetAvailableCount(m.id, index) > 0) { materialSlotIds[index] = m.id; break; }
+        }
+        RefreshMaterialSlots();
+    }
+
+    /// <summary>某材料对第 slotIndex 格而言还剩几个可选：总库存减去其他格子已占用的数量</summary>
+    private int GetAvailableCount(string materialId, int slotIndex)
+    {
+        var gd = GameData.Instance;
+        if (gd == null) return 0;
+        int occupied = 0;
+        for (int i = 0; i < MaterialSlotCount; i++)
+            if (i != slotIndex && materialSlotIds[i] == materialId) occupied++;
+        return gd.GetMaterialCount(materialId) - occupied;
+    }
+
+    /// <summary>刷新三个材料格的显示（名字 / 剩余 / 选中态配色）与下方效果提示</summary>
+    private void RefreshMaterialSlots()
+    {
+        for (int i = 0; i < MaterialSlotCount; i++)
+        {
+            if (materialSlots[i] == null) continue;
+            var img = materialSlots[i].GetComponent<Image>();
+            var label = materialSlotLabels[i];
+            var m = PetMaterial.FindById(materialSlotIds[i]);
+
+            if (m == null)
+            {
+                materialSlotIds[i] = "";
+                if (img != null) img.color = SlotEmptyColor;
+                if (label != null)
+                {
+                    label.text = "＋";
+                    label.fontSize = 36;
+                    label.color = SlotEmptyLabelColor;
+                }
+            }
+            else
+            {
+                // 选中态：材料色压暗做格子底，一眼能看出放了什么
+                if (img != null) img.color = Color.Lerp(m.color, Color.black, 0.45f);
+                if (label != null)
+                {
+                    label.text = m.displayName + " 剩" + Mathf.Max(0, GetAvailableCount(m.id, i));
+                    label.fontSize = 26;
+                    label.color = new Color(1f, 0.96f, 0.88f);
+                }
+            }
+        }
+
+        if (materialHintText != null) materialHintText.text = BuildMaterialHint();
+    }
+
+    /// <summary>汇总当前三格的效果说明（愿望页 hint）</summary>
+    private string BuildMaterialHint()
+    {
+        var families = new List<string>();
+        string treasureDesc = null;
+        int treasureCap = -1;
+
+        for (int i = 0; i < MaterialSlotCount; i++)
+        {
+            var m = PetMaterial.FindById(materialSlotIds[i]);
+            if (m == null) continue;
+            if (m.IsTreasure)
+            {
+                if (m.rarityCap > treasureCap) { treasureCap = m.rarityCap; treasureDesc = m.desc; }
+            }
+            else if (!families.Contains(m.family))
+            {
+                families.Add(m.family);
+            }
+        }
+
+        var parts = new List<string>();
+        if (families.Count > 0)
+            parts.Add("更容易出「" + string.Join("、", families.ToArray()) + "」系");
+        if (treasureDesc != null) parts.Add(treasureDesc);
+        return parts.Count > 0 ? string.Join("；", parts.ToArray()) : "不投也行，全看缘分";
     }
 
     /// <summary>一次性抽出十个候选物种。尽量不重复（重复了「十种可能」就名不副实）。</summary>
@@ -307,7 +468,7 @@ public class HatchPanel : MonoBehaviour
             PetSpecies.Def picked = null;
             for (int attempt = 0; attempt < 12; attempt++)
             {
-                picked = PetSpecies.Roll(pity);
+                picked = PetSpecies.Roll(pity, investedMaterials);
                 if (!AlreadyInCandidates(picked, i)) break;
             }
             candidates[i] = picked != null ? picked : PetSpecies.Default;
@@ -380,7 +541,7 @@ public class HatchPanel : MonoBehaviour
         // ---- 翻开：落孵（写存档）----
         var gd = GameData.Instance;
         result = gd != null
-            ? gd.HatchSpeciesWith(candidates[index], currentWish)
+            ? gd.HatchSpeciesWith(candidates[index], currentWish, investedMaterials)
             : candidates[index];
 
         if (cardLabels[index] != null && result != null)
